@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, Image, ActivityIndicator,
+  KeyboardAvoidingView, Platform, Image, ActivityIndicator, Alert,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
@@ -96,15 +96,20 @@ export default function ChatScreen() {
   }
 
   const sendText = async () => {
-    if (!text.trim() || !studentId || !coachId) return
+    if (!text.trim()) return
+    if (!studentId || !coachId) {
+      Alert.alert('Erro', `Dados não carregados.\nstudentId: ${studentId}\ncoachId: ${coachId}`)
+      return
+    }
     const content = text.trim()
     setText('')
-    await supabase.from('messages').insert({
+    const { error } = await supabase.from('messages').insert({
       coach_id: coachId,
       student_id: studentId,
       sender_role: 'student',
       content,
     })
+    if (error) { Alert.alert('Erro ao enviar', error.message); return }
     supabase.functions.invoke('send-push-notification', {
       body: {
         user_id: coach ? (coach as any).user_id : null,
