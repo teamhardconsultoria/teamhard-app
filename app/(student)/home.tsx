@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl,
+  RefreshControl, Alert,
 } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -28,32 +28,37 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false)
 
   const fetchData = async () => {
-    const today = new Date().toISOString().split('T')[0]
+    try {
+      const today = new Date().toISOString().split('T')[0]
 
-    const { data: student } = await supabase
-      .from('students')
-      .select('id, payment_status, plan_end')
-      .eq('user_id', user!.id)
-      .single()
+      const { data: student, error: studentErr } = await supabase
+        .from('students')
+        .select('id, payment_status, plan_end')
+        .eq('user_id', user!.id)
+        .single()
 
-    if (!student) return
+      if (studentErr) { Alert.alert('Erro (student)', studentErr.message); return }
+      if (!student) { Alert.alert('Erro', 'Aluno não encontrado no banco.'); return }
 
-    const [workoutRes, dietRes, msgRes, assessRes, questRes] = await Promise.all([
-      supabase.from('workouts').select('*, days:workout_days(*)').eq('student_id', student.id).eq('active', true).lte('valid_from', today).gte('valid_to', today).maybeSingle(),
-      supabase.from('diets').select('*, days:diet_days(*)').eq('student_id', student.id).eq('active', true).lte('valid_from', today).gte('valid_to', today).maybeSingle(),
-      supabase.from('messages').select('id', { count: 'exact' }).eq('receiver_id', user!.id).is('read_at', null),
-      supabase.from('assessments').select('*').eq('student_id', student.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-      supabase.from('questionnaire_assignments').select('id', { count: 'exact' }).eq('student_id', student.id).is('questionnaire_responses.id', null).limit(1),
-    ])
+      const [workoutRes, dietRes, msgRes, assessRes, questRes] = await Promise.all([
+        supabase.from('workouts').select('*, days:workout_days(*)').eq('student_id', student.id).eq('active', true).lte('valid_from', today).gte('valid_to', today).maybeSingle(),
+        supabase.from('diets').select('*, days:diet_days(*)').eq('student_id', student.id).eq('active', true).lte('valid_from', today).gte('valid_to', today).maybeSingle(),
+        supabase.from('messages').select('id', { count: 'exact', head: true }).eq('receiver_id', user!.id).is('read_at', null),
+        supabase.from('assessments').select('*').eq('student_id', student.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('questionnaire_assignments').select('id', { count: 'exact', head: true }).eq('student_id', student.id),
+      ])
 
-    setData({
-      workout: workoutRes.data,
-      diet: dietRes.data,
-      unreadMessages: msgRes.count || 0,
-      lastAssessment: assessRes.data,
-      pendingQuestionnaires: questRes.count || 0,
-      studentStatus: { payment_status: student.payment_status, plan_end: student.plan_end },
-    })
+      setData({
+        workout: workoutRes.data,
+        diet: dietRes.data,
+        unreadMessages: msgRes.count || 0,
+        lastAssessment: assessRes.data,
+        pendingQuestionnaires: questRes.count || 0,
+        studentStatus: { payment_status: student.payment_status, plan_end: student.plan_end },
+      })
+    } catch (e: any) {
+      Alert.alert('Erro home', e?.message || String(e))
+    }
   }
 
   useEffect(() => { fetchData() }, [])

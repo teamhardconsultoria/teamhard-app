@@ -3,6 +3,7 @@ import { Stack, router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { Alert } from 'react-native'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/auth'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
@@ -38,17 +39,22 @@ export default function RootLayout() {
       return
     }
 
-    if (user.first_login) {
-      router.replace('/(auth)/change-password')
-      return
-    }
+    try {
+      if (user.first_login) {
+        router.replace('/(auth)/change-password')
+        return
+      }
 
-    if (user.role === 'student') {
-      router.replace('/(student)/home')
-    } else if (user.role === 'coach') {
-      router.replace('/(coach)/dashboard')
-    } else {
-      router.replace('/(coach)/dashboard')
+      if (user.role === 'student') {
+        router.replace('/(student)/home')
+      } else if (user.role === 'coach') {
+        router.replace('/(coach)/dashboard')
+      } else {
+        Alert.alert('Debug', `Role inesperado: "${user.role}" | first_login: ${user.first_login}`)
+        router.replace('/(auth)/login')
+      }
+    } catch (e: any) {
+      Alert.alert('Erro de navegação', e?.message || String(e))
     }
   }, [user, loading])
 
