@@ -43,7 +43,7 @@ export default function HomeScreen() {
       const [workoutRes, dietRes, msgRes, assessRes, questRes] = await Promise.all([
         supabase.from('workouts').select('*, days:workout_days(*)').eq('student_id', student.id).eq('active', true).lte('valid_from', today).gte('valid_to', today).maybeSingle(),
         supabase.from('diets').select('*, days:diet_days(*)').eq('student_id', student.id).eq('active', true).lte('valid_from', today).gte('valid_to', today).maybeSingle(),
-        supabase.from('messages').select('id', { count: 'exact', head: true }).eq('receiver_id', user!.id).is('read_at', null),
+        supabase.from('messages').select('id', { count: 'exact', head: true }).eq('student_id', student.id).eq('sender_role', 'coach').is('read_at', null),
         supabase.from('assessments').select('*').eq('student_id', student.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('questionnaire_assignments').select('id', { count: 'exact', head: true }).eq('student_id', student.id),
       ])

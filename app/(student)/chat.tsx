@@ -8,12 +8,27 @@ import * as ImagePicker from 'expo-image-picker'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/auth'
 import { colors } from '@/lib/theme'
-import type { Message, User } from '@/types'
+
+interface Message {
+  id: string
+  sender_role: 'coach' | 'student'
+  content: string
+  media_url?: string
+  created_at: string
+  read_at?: string
+}
+
+interface CoachInfo {
+  name: string
+  email: string
+}
 
 export default function ChatScreen() {
   const { user } = useAuthStore()
   const [messages, setMessages] = useState<Message[]>([])
-  const [coach, setCoach] = useState<User | null>(null)
+  const [coach, setCoach] = useState<CoachInfo | null>(null)
+  const [studentId, setStudentId] = useState<string | null>(null)
+  const [coachId, setCoachId] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(true)
   const flatListRef = useRef<FlatList>(null)
@@ -22,78 +37,77 @@ export default function ChatScreen() {
     const init = async () => {
       const { data: student } = await supabase
         .from('students')
-        .select('coach_id, coach:coaches(user_id, user:users(*))')
+        .select('id, coach_id, coach:coaches(user_id, user:users(name, email))')
         .eq('user_id', user!.id)
         .single()
 
-      const coachUser = (student?.coach as any)?.user
-      setCoach(coachUser)
+      if (!student) { setLoading(false); return }
 
-      if (coachUser) {
-        await fetchMessages(user!.id, coachUser.id)
-        subscribeToMessages(user!.id, coachUser.id)
-      }
+      const coachUser = (student.coach as any)?.user
+      setCoach(coachUser)
+      setStudentId(student.id)
+      setCoachId(student.coach_id)
+
+      await fetchMessages(student.id, student.coach_id)
+      subscribeToMessages(student.id, student.coach_id)
       setLoading(false)
     }
     init()
   }, [])
 
-  const fetchMessages = async (myId: string, coachId: string) => {
+  const fetchMessages = async (sId: string, cId: string) => {
     const { data } = await supabase
       .from('messages')
-      .select('*, sender:users!sender_id(*)')
-      .or(`and(sender_id.eq.${myId},receiver_id.eq.${coachId}),and(sender_id.eq.${coachId},receiver_id.eq.${myId})`)
+      .select('id, sender_role, content, media_url, created_at, read_at')
+      .eq('student_id', sId)
+      .eq('coach_id', cId)
       .order('created_at', { ascending: true })
 
     setMessages(data || [])
 
-    // Marca como lidas
     await supabase
       .from('messages')
       .update({ read_at: new Date().toISOString() })
-      .eq('receiver_id', myId)
+      .eq('student_id', sId)
+      .eq('coach_id', cId)
+      .eq('sender_role', 'coach')
       .is('read_at', null)
   }
 
-  const subscribeToMessages = (myId: string, coachId: string) => {
-    const channel = supabase
-      .channel('messages')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
-        async (payload) => {
-          const msg = payload.new as Message
-          if (
-            (msg.sender_id === myId && msg.receiver_id === coachId) ||
-            (msg.sender_id === coachId && msg.receiver_id === myId)
-          ) {
-            const { data: full } = await supabase
-              .from('messages')
-              .select('*, sender:users!sender_id(*)')
-              .eq('id', msg.id)
-              .single()
-            if (full) setMessages(prev => [...prev, full])
-          }
+  const subscribeToMessages = (sId: string, cId: string) => {
+    supabase
+      .channel(`chat-student-${sId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `student_id=eq.${sId}`,
+      }, async (payload) => {
+        const msg = payload.new as Message
+        setMessages(prev => [...prev, msg])
+        if (msg.sender_role === 'coach') {
+          await supabase
+            .from('messages')
+            .update({ read_at: new Date().toISOString() })
+            .eq('id', msg.id)
         }
-      )
+      })
       .subscribe()
-
-    return () => supabase.removeChannel(channel)
   }
 
   const sendText = async () => {
-    if (!text.trim() || !coach) return
+    if (!text.trim() || !studentId || !coachId) return
     const content = text.trim()
     setText('')
     await supabase.from('messages').insert({
-      sender_id: user!.id,
-      receiver_id: coach.id,
+      coach_id: coachId,
+      student_id: studentId,
+      sender_role: 'student',
       content,
-      type: 'text',
     })
     supabase.functions.invoke('send-push-notification', {
       body: {
-        user_id: coach.id,
+        user_id: coach ? (coach as any).user_id : null,
         title: user!.name || 'Aluno',
         body: content.length > 80 ? content.slice(0, 80) + '…' : content,
         data: { screen: '/(coach)/chat' },
@@ -102,14 +116,15 @@ export default function ChatScreen() {
   }
 
   const sendPhoto = async () => {
+    if (!studentId || !coachId) return
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.8,
     })
-    if (result.canceled || !coach) return
+    if (result.canceled) return
 
     const uri = result.assets[0].uri
-    const filename = `chat/${user!.id}/${Date.now()}.jpg`
+    const filename = `chat/${studentId}/${Date.now()}.jpg`
 
     const formData = new FormData()
     formData.append('file', { uri, name: filename, type: 'image/jpeg' } as any)
@@ -121,24 +136,23 @@ export default function ChatScreen() {
     if (upload) {
       const { data: { publicUrl } } = supabase.storage.from('chat-media').getPublicUrl(filename)
       await supabase.from('messages').insert({
-        sender_id: user!.id,
-        receiver_id: coach.id,
-        type: 'photo',
-        file_url: publicUrl,
+        coach_id: coachId,
+        student_id: studentId,
+        sender_role: 'student',
+        media_url: publicUrl,
       })
     }
   }
 
   const renderMessage = ({ item }: { item: Message }) => {
-    const isMe = item.sender_id === user!.id
+    const isMe = item.sender_role === 'student'
     return (
       <View style={[styles.msgWrap, isMe ? styles.msgWrapRight : styles.msgWrapLeft]}>
         <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
-          {item.type === 'text' && (
+          {item.media_url ? (
+            <Image source={{ uri: item.media_url }} style={styles.msgImage} resizeMode="cover" />
+          ) : (
             <Text style={[styles.msgText, isMe && styles.msgTextMe]}>{item.content}</Text>
-          )}
-          {item.type === 'photo' && item.file_url && (
-            <Image source={{ uri: item.file_url }} style={styles.msgImage} resizeMode="cover" />
           )}
         </View>
         <Text style={styles.msgTime}>
@@ -157,7 +171,6 @@ export default function ChatScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}
     >
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.coachAvatar}>
           <Text style={styles.coachAvatarText}>{coach?.name?.charAt(0) || 'C'}</Text>
@@ -178,7 +191,6 @@ export default function ChatScreen() {
         showsVerticalScrollIndicator={false}
       />
 
-      {/* Input */}
       <View style={styles.inputWrap}>
         <TouchableOpacity style={styles.attachBtn} onPress={sendPhoto}>
           <Ionicons name="image" size={22} color={colors.subtext} />
@@ -218,12 +230,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   coachAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 42, height: 42, borderRadius: 21,
     backgroundColor: colors.yellow,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
   coachAvatarText: { fontSize: 18, fontWeight: '800', color: '#0A0A0A' },
   coachName: { fontSize: 16, fontWeight: '700', color: colors.text },
@@ -240,34 +249,19 @@ const styles = StyleSheet.create({
   msgImage: { width: 200, height: 200, borderRadius: 12 },
   msgTime: { fontSize: 10, color: colors.subtext },
   inputWrap: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 10,
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    flexDirection: 'row', alignItems: 'flex-end', gap: 10,
+    padding: 16, borderTopWidth: 1, borderTopColor: colors.border,
     backgroundColor: colors.dark,
   },
   attachBtn: { padding: 8 },
   input: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: colors.text,
-    maxHeight: 120,
+    flex: 1, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+    borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10,
+    fontSize: 15, color: colors.text, maxHeight: 120,
   },
   sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.yellow,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: colors.yellow, alignItems: 'center', justifyContent: 'center',
   },
   sendBtnDisabled: { backgroundColor: colors.border },
 })
