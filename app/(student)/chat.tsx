@@ -35,13 +35,17 @@ export default function ChatScreen() {
 
   useEffect(() => {
     const init = async () => {
-      const { data: student } = await supabase
+      const { data: student, error: studentErr } = await supabase
         .from('students')
         .select('id, coach_id, coach:coaches(user_id, user:users(name, email))')
         .eq('user_id', user!.id)
         .single()
 
-      if (!student) { setLoading(false); return }
+      if (studentErr || !student) {
+        Alert.alert('Erro (init)', `user_id: ${user!.id}\n${studentErr?.message || 'student null'}`)
+        setLoading(false)
+        return
+      }
 
       const coachUser = (student.coach as any)?.user
       setCoach(coachUser)
