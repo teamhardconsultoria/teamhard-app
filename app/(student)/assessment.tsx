@@ -81,10 +81,13 @@ export default function AssessmentScreen() {
           .upload(filename, blob, { contentType: 'image/jpeg', upsert: true })
 
         if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('assessment-photos')
+            .getPublicUrl(filename)
           await supabase.from('assessment_photos').insert({
             assessment_id: assessment.id,
             angle: angle.key,
-            photo_url: filename,
+            photo_url: publicUrl,
           })
         }
       }

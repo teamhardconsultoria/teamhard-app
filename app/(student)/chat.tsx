@@ -37,20 +37,34 @@ export default function ChatScreen() {
     const init = async () => {
       const { data: student, error: studentErr } = await supabase
         .from('students')
-        .select('id, coach_id, coach:coaches(user_id, user:users(name, email))')
+        .select('id, coach_id')
         .eq('user_id', user!.id)
         .single()
 
       if (studentErr || !student) {
-        Alert.alert('Erro (init)', `user_id: ${user!.id}\n${studentErr?.message || 'student null'}`)
+        Alert.alert('Erro (init)', studentErr?.message || 'Aluno não encontrado')
         setLoading(false)
         return
       }
 
-      const coachUser = (student.coach as any)?.user
-      setCoach(coachUser)
       setStudentId(student.id)
       setCoachId(student.coach_id)
+
+      // Busca o usuário do coach separadamente
+      const { data: coachRecord } = await supabase
+        .from('coaches')
+        .select('user_id')
+        .eq('id', student.coach_id)
+        .single()
+
+      if (coachRecord?.user_id) {
+        const { data: coachUser } = await supabase
+          .from('users')
+          .select('name, email')
+          .eq('id', coachRecord.user_id)
+          .single()
+        setCoach(coachUser)
+      }
 
       await fetchMessages(student.id, student.coach_id)
       subscribeToMessages(student.id, student.coach_id)
