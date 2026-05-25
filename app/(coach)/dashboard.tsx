@@ -1,5 +1,4 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
-import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { colors } from '@/lib/theme'
 import { useAuthStore } from '@/store/auth'
@@ -9,7 +8,6 @@ export default function CoachDashboardMobile() {
 
   const handleSignOut = async () => {
     await signOut()
-    router.replace('/(auth)/login')
   }
 
   return (
