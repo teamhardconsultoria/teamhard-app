@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   bubble: { borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10 },
   bubbleMe: { backgroundColor: colors.yellow, borderBottomRightRadius: 4 },
   bubbleOther: { backgroundColor: colors.card, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: colors.border },
-  msgText: { fontSize: 15, color: colors.dark },
+  msgText: { fontSize: 15, color: colors.text },
   msgTextMe: { color: '#0A0A0A' },
   msgImage: { width: 200, height: 200, borderRadius: 12 },
   msgTime: { fontSize: 10, color: colors.subtext },
