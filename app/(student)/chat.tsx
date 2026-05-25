@@ -115,16 +115,14 @@ export default function ChatScreen() {
     }).select('id, sender_id, content, file_url, read_at, created_at').single()
     if (error) { Alert.alert('Erro ao enviar', error.message); return }
     if (inserted) setMessages(prev => [...prev, inserted])
-    else {
-      supabase.functions.invoke('send-push-notification', {
-        body: {
-          user_id: coachUserId,
-          title: user!.name || 'Aluno',
-          body: content.length > 80 ? content.slice(0, 80) + '…' : content,
-          data: { screen: '/(coach)/chat' },
-        },
-      })
-    }
+    supabase.functions.invoke('send-push-notification', {
+      body: {
+        user_id: coachUserId,
+        title: user!.name || 'Aluno',
+        body: content.length > 80 ? content.slice(0, 80) + '…' : content,
+        data: { screen: '/(coach)/chat' },
+      },
+    })
   }
 
   const sendPhoto = async () => {
