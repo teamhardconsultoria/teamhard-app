@@ -6,6 +6,7 @@ import {
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
+import * as FileSystem from 'expo-file-system'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/auth'
 import { colors } from '@/lib/theme'
@@ -73,12 +74,20 @@ export default function AssessmentScreen() {
         if (!uri) continue
 
         const filename = `assessments/${student!.id}/${assessment.id}/${angle.key}.jpg`
-        const formData = new FormData()
-        formData.append('file', { uri, name: `${angle.key}.jpg`, type: 'image/jpeg' } as any)
+
+        // Lê o arquivo como base64 e converte para Uint8Array (funciona no Android)
+        const base64 = await FileSystem.readAsStringAsync(uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        })
+        const binaryStr = atob(base64)
+        const bytes = new Uint8Array(binaryStr.length)
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i)
+        }
 
         const { error: uploadError } = await supabase.storage
           .from('assessment-photos')
-          .upload(filename, formData, { contentType: 'image/jpeg', upsert: true })
+          .upload(filename, bytes, { contentType: 'image/jpeg', upsert: true })
 
         if (uploadError) {
           console.warn('Erro ao enviar foto', angle.key, uploadError.message)
