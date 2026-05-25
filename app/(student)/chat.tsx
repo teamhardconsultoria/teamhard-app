@@ -107,13 +107,14 @@ export default function ChatScreen() {
     if (!text.trim() || !coachUserId) return
     const content = text.trim()
     setText('')
-    const { error } = await supabase.from('messages').insert({
+    const { data: inserted, error } = await supabase.from('messages').insert({
       sender_id: user!.id,
       receiver_id: coachUserId,
       content,
       type: 'text',
-    })
-    if (error) Alert.alert('Erro ao enviar', error.message)
+    }).select('id, sender_id, content, file_url, read_at, created_at').single()
+    if (error) { Alert.alert('Erro ao enviar', error.message); return }
+    if (inserted) setMessages(prev => [...prev, inserted])
     else {
       supabase.functions.invoke('send-push-notification', {
         body: {
