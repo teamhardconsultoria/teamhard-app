@@ -45,15 +45,21 @@ export default function HomeScreen() {
         supabase.from('diets').select('*, days:diet_days(*)').eq('student_id', student.id).eq('active', true).lte('valid_from', today).gte('valid_to', today).maybeSingle(),
         supabase.from('messages').select('id', { count: 'exact', head: true }).eq('receiver_id', user!.id).is('read_at', null),
         supabase.from('assessments').select('*').eq('student_id', student.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('questionnaire_assignments').select('id', { count: 'exact', head: true }).eq('student_id', student.id),
+        Promise.all([
+          supabase.from('questionnaire_assignments').select('id', { count: 'exact', head: true }).eq('student_id', student.id),
+          supabase.from('questionnaire_responses').select('id', { count: 'exact', head: true }).eq('student_id', student.id),
+        ]),
       ])
+
+      const [questAssignRes, questRespRes] = questRes
+      const pendingQuestionnaires = Math.max(0, (questAssignRes.count || 0) - (questRespRes.count || 0))
 
       setData({
         workout: workoutRes.data,
         diet: dietRes.data,
         unreadMessages: msgRes.count || 0,
         lastAssessment: assessRes.data,
-        pendingQuestionnaires: questRes.count || 0,
+        pendingQuestionnaires,
         studentStatus: { payment_status: student.payment_status, plan_end: student.plan_end },
       })
     } catch (e: any) {
