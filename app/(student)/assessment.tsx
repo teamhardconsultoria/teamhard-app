@@ -67,29 +67,32 @@ export default function AssessmentScreen() {
 
       if (error) throw error
 
-      // Upload das fotos para o bucket privado
+      // Upload das fotos
       for (const angle of ANGLES) {
         const uri = photos[angle.key]
         if (!uri) continue
 
         const filename = `assessments/${student!.id}/${assessment.id}/${angle.key}.jpg`
-        const response = await fetch(uri)
-        const blob = await response.blob()
+        const formData = new FormData()
+        formData.append('file', { uri, name: `${angle.key}.jpg`, type: 'image/jpeg' } as any)
 
         const { error: uploadError } = await supabase.storage
           .from('assessment-photos')
-          .upload(filename, blob, { contentType: 'image/jpeg', upsert: true })
+          .upload(filename, formData, { contentType: 'image/jpeg', upsert: true })
 
-        if (!uploadError) {
-          const { data: { publicUrl } } = supabase.storage
-            .from('assessment-photos')
-            .getPublicUrl(filename)
-          await supabase.from('assessment_photos').insert({
-            assessment_id: assessment.id,
-            angle: angle.key,
-            photo_url: publicUrl,
-          })
+        if (uploadError) {
+          console.warn('Erro ao enviar foto', angle.key, uploadError.message)
+          continue
         }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('assessment-photos')
+          .getPublicUrl(filename)
+        await supabase.from('assessment_photos').insert({
+          assessment_id: assessment.id,
+          angle: angle.key,
+          photo_url: publicUrl,
+        })
       }
 
       Alert.alert('Avaliação enviada!', 'Seu coach foi notificado.', [
