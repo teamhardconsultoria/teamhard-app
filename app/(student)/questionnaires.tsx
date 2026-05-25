@@ -134,7 +134,7 @@ export default function QuestionnairesScreen() {
 
         <ScrollView contentContainerStyle={styles.formContent} showsVerticalScrollIndicator={false}>
           {selected.questions.map((q, idx) => (
-            <View key={q.id} style={styles.questionCard}>
+            <View key={`${q.id}-${idx}`} style={styles.questionCard}>
               <Text style={styles.questionNum}>Pergunta {idx + 1}{q.required ? ' *' : ''}</Text>
               <Text style={styles.questionText}>{q.text}</Text>
 

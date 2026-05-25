@@ -5,6 +5,7 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
+import * as FileSystem from 'expo-file-system'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/auth'
 import { colors } from '@/lib/theme'
@@ -135,11 +136,14 @@ export default function ChatScreen() {
 
     const uri = result.assets[0].uri
     const filename = `chat/${user!.id}/${Date.now()}.jpg`
-    const formData = new FormData()
-    formData.append('file', { uri, name: filename, type: 'image/jpeg' } as any)
 
-    const { data: upload } = await supabase.storage.from('chat-media').upload(filename, formData)
-    if (upload) {
+    const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 })
+    const binaryStr = atob(base64)
+    const bytes = new Uint8Array(binaryStr.length)
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
+
+    const { error: uploadError } = await supabase.storage.from('chat-media').upload(filename, bytes, { contentType: 'image/jpeg', upsert: true })
+    if (!uploadError) {
       const { data: { publicUrl } } = supabase.storage.from('chat-media').getPublicUrl(filename)
       await supabase.from('messages').insert({
         sender_id: user!.id,
@@ -147,6 +151,8 @@ export default function ChatScreen() {
         type: 'photo',
         file_url: publicUrl,
       })
+    } else {
+      Alert.alert('Erro', 'Não foi possível enviar a foto.')
     }
   }
 
