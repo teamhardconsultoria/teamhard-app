@@ -4,7 +4,7 @@ import { sendAutoMessage } from '../../lib/autoMessage'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 
-interface StudentPayment { id:string; name:string; email:string; plan_type:string; payment_status:string; plan_end:string }
+interface StudentPayment { id:string; name:string; email:string; plan_type:string; payment_status:string; plan_end:string; plan_start:string }
 interface Payment {
   id:string; amount:number; status:string; payment_method?:string; due_date:string; paid_at?:string;
   plan_type:string; created_at:string; source:string; installment_number?:number; total_installments?:number
@@ -29,13 +29,13 @@ const labelStyle = { fontSize:11, color:'var(--text-2)', textTransform:'uppercas
 const formatDate = (d:string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')
 const formatMoney = (n:number) => n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' })
 
-function computeSchedulePreview(planEnd: string, planType: string) {
+function computeSchedulePreview(planStart: string, planType: string) {
   const months = PLAN_MONTHS[planType] || 1
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const result: { installment: number; date: string }[] = []
   for (let i = 1; i <= months; i++) {
-    const d = new Date(planEnd + 'T12:00:00')
-    d.setMonth(d.getMonth() - (months - i + 1))
+    const d = new Date(planStart + 'T12:00:00')
+    d.setMonth(d.getMonth() + (i - 1))
     if (d >= today) result.push({ installment: i, date: d.toISOString().split('T')[0] })
   }
   return result
@@ -91,8 +91,8 @@ export default function Payments() {
   }
 
   const loadStudents = async (cId: string) => {
-    const { data } = await supabase.from('students').select('id, plan_type, payment_status, plan_end, user:users(name, email)').eq('coach_id', cId).order('created_at', { ascending: false })
-    setStudents((data || []).map((s: any) => ({ id:s.id, name:s.user.name, email:s.user.email, plan_type:s.plan_type, payment_status:s.payment_status, plan_end:s.plan_end })))
+    const { data } = await supabase.from('students').select('id, plan_type, payment_status, plan_start, plan_end, user:users(name, email)').eq('coach_id', cId).order('created_at', { ascending: false })
+    setStudents((data || []).map((s: any) => ({ id:s.id, name:s.user.name, email:s.user.email, plan_type:s.plan_type, payment_status:s.payment_status, plan_start:s.plan_start, plan_end:s.plan_end })))
   }
 
   const loadAgenda = async () => {
@@ -145,10 +145,12 @@ export default function Payments() {
       const start = base > now ? base : now
       start.setMonth(start.getMonth() + (PLAN_MONTHS[modalStudent.plan_type] || 1))
       const newPlanEnd = start.toISOString().split('T')[0]
-      await supabase.from('payments').insert({ student_id:modalStudent.id, amount:parseFloat(form.amount), status:'paid', payment_method:form.payment_method, due_date:form.due_date, paid_at:form.paid_at, plan_type:modalStudent.plan_type })
-      await supabase.from('students').update({ payment_status:'active', plan_end:newPlanEnd }).eq('id', modalStudent.id)
-      // Gera automaticamente o cronograma do novo período
       const months = PLAN_MONTHS[modalStudent.plan_type] || 1
+      // plan_start do novo período = vencimento do período anterior
+      const newPlanStart = modalStudent.plan_end
+      await supabase.from('payments').insert({ student_id:modalStudent.id, amount:parseFloat(form.amount), status:'paid', payment_method:form.payment_method, due_date:form.due_date, paid_at:form.paid_at, plan_type:modalStudent.plan_type })
+      await supabase.from('students').update({ payment_status:'active', plan_end:newPlanEnd, plan_start:newPlanStart }).eq('id', modalStudent.id)
+      // Gera cronograma do novo período (a partir do novo plan_start)
       await supabase.rpc('generate_payment_schedule', {
         p_student_id: modalStudent.id,
         p_plan_end: newPlanEnd,
@@ -468,7 +470,7 @@ export default function Payments() {
       {/* Modal Cronograma */}
       {showScheduleModal && scheduleStudent && (() => {
         const preview = scheduleForm.amount_per_inst && parseFloat(scheduleForm.amount_per_inst) > 0
-          ? computeSchedulePreview(scheduleStudent.plan_end, scheduleStudent.plan_type)
+          ? computeSchedulePreview(scheduleStudent.plan_start, scheduleStudent.plan_type)
           : []
         return (
           <div style={{ position:'fixed', inset:0, backgroundColor:'var(--overlay)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:50, padding:16 }}>
@@ -506,7 +508,7 @@ export default function Payments() {
                 )}
                 <div style={{ backgroundColor:'rgba(232,255,0,0.05)', border:'1px solid rgba(232,255,0,0.15)', borderRadius:10, padding:'10px 12px' }}>
                   <p style={{ fontSize:12, color:'var(--text-2)', margin:0 }}>
-                    Plano vence em <span style={{ color:'var(--text)', fontWeight:600 }}>{formatDate(scheduleStudent.plan_end)}</span>.
+                    Parcelas mensais a partir de <span style={{ color:'var(--text)', fontWeight:600 }}>{formatDate(scheduleStudent.plan_start)}</span>, plano até <span style={{ color:'var(--text)', fontWeight:600 }}>{formatDate(scheduleStudent.plan_end)}</span>.
                     Parcelas futuras pendentes existentes serão substituídas.
                   </p>
                 </div>
