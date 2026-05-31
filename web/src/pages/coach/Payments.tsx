@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react'
-import { Plus, X, Check, History, Zap, Copy, ExternalLink, ChevronLeft, Trash2, RefreshCw, Link, ShieldCheck } from 'lucide-react'
+import { Plus, X, Check, History, Zap, Copy, ExternalLink, ChevronLeft, Trash2, RefreshCw, Link, ShieldCheck, Calendar } from 'lucide-react'
 import { sendAutoMessage } from '../../lib/autoMessage'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 
 interface StudentPayment { id:string; name:string; email:string; plan_type:string; payment_status:string; plan_end:string }
-interface Payment { id:string; amount:number; status:string; payment_method?:string; due_date:string; paid_at?:string; plan_type:string; created_at:string }
+interface Payment {
+  id:string; amount:number; status:string; payment_method?:string; due_date:string; paid_at?:string;
+  plan_type:string; created_at:string; source:string; installment_number?:number; total_installments?:number
+}
+interface AgendaItem {
+  id:string; student_id:string; student_name:string; amount:number; due_date:string;
+  plan_type:string; status:string; installment_number:number; total_installments:number
+}
 
 const STATUS_COLOR: Record<string, string> = { active:'#00C853', pending:'#FF9800', overdue:'#FF4444', blocked:'#FF4444' }
 const STATUS_LABEL: Record<string, string> = { active:'Em dia', pending:'Pendente', overdue:'Vencido', blocked:'Bloqueado' }
@@ -19,8 +26,20 @@ type Filter = 'all'|'active'|'pending'|'overdue'|'blocked'
 const spin = { width:20, height:20, border:'2px solid #E8FF00', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }
 const inputStyle = { width:'100%', padding:'11px 14px', backgroundColor:'var(--bg)', border:'1px solid var(--border)', borderRadius:10, color:'var(--text)', fontSize:13, outline:'none', boxSizing:'border-box' as const }
 const labelStyle = { fontSize:11, color:'var(--text-2)', textTransform:'uppercase' as const, letterSpacing:1 }
-const formatDate = (d:string) => new Date(d).toLocaleDateString('pt-BR')
+const formatDate = (d:string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')
 const formatMoney = (n:number) => n.toLocaleString('pt-BR', { style:'currency', currency:'BRL' })
+
+function computeSchedulePreview(planEnd: string, planType: string) {
+  const months = PLAN_MONTHS[planType] || 1
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const result: { installment: number; date: string }[] = []
+  for (let i = 1; i <= months; i++) {
+    const d = new Date(planEnd + 'T12:00:00')
+    d.setMonth(d.getMonth() - (months - i + 1))
+    if (d >= today) result.push({ installment: i, date: d.toISOString().split('T')[0] })
+  }
+  return result
+}
 
 export default function Payments() {
   const { user } = useAuthStore()
@@ -28,6 +47,9 @@ export default function Payments() {
   const [students, setStudents] = useState<StudentPayment[]>([])
   const [filter, setFilter] = useState<Filter>('all')
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'students'|'agenda'>('students')
+  const [agenda, setAgenda] = useState<AgendaItem[]>([])
+  const [loadingAgenda, setLoadingAgenda] = useState(false)
   const [historyStudent, setHistoryStudent] = useState<StudentPayment | null>(null)
   const [history, setHistory] = useState<Payment[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -51,6 +73,12 @@ export default function Payments() {
   const [subError, setSubError] = useState('')
   const [subResult, setSubResult] = useState<{ paymentLink?:string } | null>(null)
   const [linkCopied, setLinkCopied] = useState(false)
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [scheduleStudent, setScheduleStudent] = useState<StudentPayment | null>(null)
+  const [scheduleForm, setScheduleForm] = useState({ amount_per_inst: '' })
+  const [scheduleSaving, setScheduleSaving] = useState(false)
+  const [scheduleError, setScheduleError] = useState('')
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null)
 
   useEffect(() => { init() }, [])
 
@@ -67,9 +95,44 @@ export default function Payments() {
     setStudents((data || []).map((s: any) => ({ id:s.id, name:s.user.name, email:s.user.email, plan_type:s.plan_type, payment_status:s.payment_status, plan_end:s.plan_end })))
   }
 
+  const loadAgenda = async () => {
+    setLoadingAgenda(true)
+    const { data } = await supabase
+      .from('payments')
+      .select('id, student_id, amount, due_date, plan_type, status, installment_number, total_installments, student:students(user:users(name))')
+      .eq('source', 'scheduled')
+      .in('status', ['pending', 'overdue'])
+      .order('due_date', { ascending: true })
+      .limit(300)
+    setAgenda((data || []).map((p: any) => ({
+      id: p.id,
+      student_id: p.student_id,
+      student_name: p.student?.user?.name || '—',
+      amount: p.amount,
+      due_date: p.due_date,
+      plan_type: p.plan_type,
+      status: p.status,
+      installment_number: p.installment_number ?? 1,
+      total_installments: p.total_installments ?? 1,
+    })))
+    setLoadingAgenda(false)
+  }
+
   const openHistory = async (student: StudentPayment) => {
     setHistoryStudent(student); setLoadingHistory(true)
-    const { data } = await supabase.from('payments').select('id, amount, status, payment_method, due_date, paid_at, plan_type, created_at').eq('student_id', student.id).order('created_at', { ascending: false })
+    // Tenta selecionar colunas da migration 020; se ainda não existirem, cai no fallback
+    let { data, error } = await supabase.from('payments')
+      .select('id, amount, status, payment_method, due_date, paid_at, plan_type, created_at, source, installment_number, total_installments')
+      .eq('student_id', student.id)
+      .order('due_date', { ascending: false })
+    if (error) {
+      // Fallback: busca sem as colunas novas (migration 020 ainda não aplicada)
+      const fallback = await supabase.from('payments')
+        .select('id, amount, status, payment_method, due_date, paid_at, plan_type, created_at')
+        .eq('student_id', student.id)
+        .order('due_date', { ascending: false })
+      data = (fallback.data || []).map((p: any) => ({ ...p, source: 'manual' }))
+    }
     setHistory(data || [])
     setLoadingHistory(false)
   }
@@ -84,10 +147,43 @@ export default function Payments() {
       const newPlanEnd = start.toISOString().split('T')[0]
       await supabase.from('payments').insert({ student_id:modalStudent.id, amount:parseFloat(form.amount), status:'paid', payment_method:form.payment_method, due_date:form.due_date, paid_at:form.paid_at, plan_type:modalStudent.plan_type })
       await supabase.from('students').update({ payment_status:'active', plan_end:newPlanEnd }).eq('id', modalStudent.id)
+      // Gera automaticamente o cronograma do novo período
+      const months = PLAN_MONTHS[modalStudent.plan_type] || 1
+      await supabase.rpc('generate_payment_schedule', {
+        p_student_id: modalStudent.id,
+        p_plan_end: newPlanEnd,
+        p_plan_type: modalStudent.plan_type,
+        p_amount_per_inst: parseFloat(form.amount) / months,
+      })
       setShowModal(false)
       await loadStudents(coachId)
       if (historyStudent?.id === modalStudent.id) await openHistory(modalStudent)
+      if (activeTab === 'agenda') await loadAgenda()
     } catch (err: any) { setError(err.message || 'Erro ao registrar.') } finally { setSaving(false) }
+  }
+
+  const handleGenerateSchedule = async () => {
+    if (!scheduleForm.amount_per_inst || !scheduleStudent) { setScheduleError('Preencha o valor por parcela.'); return }
+    setScheduleSaving(true); setScheduleError('')
+    const { error: rpcError } = await supabase.rpc('generate_payment_schedule', {
+      p_student_id: scheduleStudent.id,
+      p_plan_end: scheduleStudent.plan_end,
+      p_plan_type: scheduleStudent.plan_type,
+      p_amount_per_inst: parseFloat(scheduleForm.amount_per_inst),
+    })
+    if (rpcError) { setScheduleError(rpcError.message); setScheduleSaving(false); return }
+    setShowScheduleModal(false)
+    if (historyStudent?.id === scheduleStudent.id) await openHistory(scheduleStudent)
+    if (activeTab === 'agenda') await loadAgenda()
+    setScheduleSaving(false)
+  }
+
+  const handleMarkPaid = async (payment: Payment) => {
+    setMarkingPaidId(payment.id)
+    await supabase.from('payments').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', payment.id)
+    setHistory(prev => prev.map(p => p.id === payment.id ? { ...p, status: 'paid', paid_at: new Date().toISOString() } : p))
+    if (activeTab === 'agenda') await loadAgenda()
+    setMarkingPaidId(null)
   }
 
   const handleAsaas = async () => {
@@ -116,6 +212,7 @@ export default function Payments() {
     setDeletingId(paymentId)
     await supabase.from('payments').delete().eq('id', paymentId)
     setHistory(prev => prev.filter(p => p.id !== paymentId))
+    if (activeTab === 'agenda') await loadAgenda()
     setDeletingId(null)
   }
 
@@ -133,42 +230,115 @@ export default function Payments() {
 
   const filtered = filter === 'all' ? students : students.filter(s => s.payment_status === filter)
   const counts = { all:students.length, active:students.filter(s=>s.payment_status==='active').length, pending:students.filter(s=>s.payment_status==='pending').length, overdue:students.filter(s=>s.payment_status==='overdue').length, blocked:students.filter(s=>s.payment_status==='blocked').length }
+  const agendaOverdueCount = agenda.filter(a => a.status === 'overdue').length
+
+  // Agrupa agenda por mês para exibição
+  const agendaByMonth: [string, AgendaItem[]][] = []
+  const monthMap: Record<string, AgendaItem[]> = {}
+  agenda.forEach(item => {
+    const key = item.due_date.slice(0, 7)
+    if (!monthMap[key]) { monthMap[key] = []; agendaByMonth.push([key, monthMap[key]]) }
+    monthMap[key].push(item)
+  })
 
   return (
     <div style={{ flex:1, display:'flex', overflow:'hidden', backgroundColor:'var(--bg)' }}>
-      {/* Lista principal */}
+      {/* Painel principal */}
       <div style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0, overflow:'hidden' }}>
-        <div style={{ padding:'20px 24px 16px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+        <div style={{ padding:'20px 24px 0', flexShrink:0 }}>
           <h1 style={{ fontSize:22, fontWeight:900, color:'var(--text)', margin:0 }}>Pagamentos</h1>
-          <p style={{ fontSize:12, color:'var(--text-2)', marginTop:4, margin:'4px 0 0 0' }}>{students.length} aluno{students.length !== 1 ? 's' : ''}</p>
+          <p style={{ fontSize:12, color:'var(--text-2)', margin:'4px 0 12px 0' }}>{students.length} aluno{students.length !== 1 ? 's' : ''}</p>
+          {/* Tabs */}
+          <div style={{ display:'flex', gap:2, borderBottom:'1px solid var(--border)' }}>
+            <TabBtn label="Alunos" active={activeTab === 'students'} onClick={() => setActiveTab('students')} />
+            <TabBtn
+              label="Agenda"
+              active={activeTab === 'agenda'}
+              badge={agendaOverdueCount > 0 ? agendaOverdueCount : undefined}
+              onClick={() => { setActiveTab('agenda'); if (agenda.length === 0) loadAgenda() }}
+            />
+          </div>
         </div>
 
-        {/* Filtros */}
-        <div style={{ display:'flex', gap:6, padding:'10px 24px', borderBottom:'1px solid var(--border)', flexShrink:0, overflowX:'auto' }}>
-          {([['all','Todos'],['active','Em dia'],['pending','Pendente'],['overdue','Vencido'],['blocked','Bloqueado']] as [Filter,string][]).map(([key, label]) => (
-            <FilterBtn key={key} label={label} count={counts[key]} active={filter === key} onClick={() => setFilter(key)} />
-          ))}
-        </div>
+        {/* Filtros — só na aba Alunos */}
+        {activeTab === 'students' && (
+          <div style={{ display:'flex', gap:6, padding:'10px 24px', borderBottom:'1px solid var(--border)', flexShrink:0, overflowX:'auto' }}>
+            {([['all','Todos'],['active','Em dia'],['pending','Pendente'],['overdue','Vencido'],['blocked','Bloqueado']] as [Filter,string][]).map(([key, label]) => (
+              <FilterBtn key={key} label={label} count={counts[key]} active={filter === key} onClick={() => setFilter(key)} />
+            ))}
+          </div>
+        )}
 
-        {/* Cards */}
+        {/* Conteúdo */}
         <div style={{ flex:1, overflowY:'auto', padding:20 }}>
-          {loading ? (
-            <div style={{ display:'flex', justifyContent:'center', paddingTop:60 }}><div style={spin} /></div>
-          ) : filtered.length === 0 ? (
-            <p style={{ textAlign:'center', color:'var(--text-2)', fontSize:14, paddingTop:60 }}>Nenhum aluno neste filtro.</p>
+          {activeTab === 'students' ? (
+            loading ? (
+              <div style={{ display:'flex', justifyContent:'center', paddingTop:60 }}><div style={spin} /></div>
+            ) : filtered.length === 0 ? (
+              <p style={{ textAlign:'center', color:'var(--text-2)', fontSize:14, paddingTop:60 }}>Nenhum aluno neste filtro.</p>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:10, maxWidth:700 }}>
+                {filtered.map(student => (
+                  <StudentCard key={student.id} student={student}
+                    onHistory={() => openHistory(student)}
+                    onAsaas={() => { setAsaasStudent(student); setAsaasForm({ amount:'', billing_type:'PIX', due_date: new Date().toISOString().split('T')[0], cpf:'', installment_count: 1 }); setAsaasResult(null); setAsaasError(''); setShowAsaas(true) }}
+                    onManual={() => { setModalStudent(student); setForm(emptyForm); setError(''); setShowModal(true) }}
+                    onSub={() => { setSubStudent(student); setSubForm(emptySub); setSubResult(null); setSubError(''); setShowSub(true) }}
+                    onUnblock={() => handleUnblock(student)}
+                    isHistoryActive={historyStudent?.id === student.id}
+                  />
+                ))}
+              </div>
+            )
           ) : (
-            <div style={{ display:'flex', flexDirection:'column', gap:10, maxWidth:700 }}>
-              {filtered.map(student => (
-                <StudentCard key={student.id} student={student}
-                  onHistory={() => openHistory(student)}
-                  onAsaas={() => { setAsaasStudent(student); setAsaasForm({ amount:'', billing_type:'PIX', due_date: new Date().toISOString().split('T')[0], cpf:'', installment_count: 1 }); setAsaasResult(null); setAsaasError(''); setShowAsaas(true) }}
-                  onManual={() => { setModalStudent(student); setForm(emptyForm); setError(''); setShowModal(true) }}
-                  onSub={() => { setSubStudent(student); setSubForm(emptySub); setSubResult(null); setSubError(''); setShowSub(true) }}
-                  onUnblock={() => handleUnblock(student)}
-                  isHistoryActive={historyStudent?.id === student.id}
-                />
-              ))}
-            </div>
+            /* Aba Agenda */
+            loadingAgenda ? (
+              <div style={{ display:'flex', justifyContent:'center', paddingTop:60 }}><div style={spin} /></div>
+            ) : agenda.length === 0 ? (
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', paddingTop:60, gap:12 }}>
+                <Calendar size={36} color="var(--text-3)" />
+                <p style={{ color:'var(--text-2)', fontSize:14, textAlign:'center', margin:0 }}>Nenhum vencimento agendado.</p>
+                <p style={{ color:'var(--text-3)', fontSize:12, textAlign:'center', margin:0, maxWidth:280 }}>Registre um pagamento manual para gerar automaticamente o cronograma do próximo período.</p>
+              </div>
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:24, maxWidth:700 }}>
+                {agendaByMonth.map(([monthKey, items]) => (
+                  <div key={monthKey}>
+                    <p style={{ fontSize:11, fontWeight:700, color:'var(--text-2)', textTransform:'uppercase', letterSpacing:1, margin:'0 0 10px 0' }}>
+                      {new Date(monthKey + '-15').toLocaleDateString('pt-BR', { month:'long', year:'numeric' })}
+                    </p>
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      {items.map(item => {
+                        const isOverdue = item.status === 'overdue'
+                        const student = students.find(s => s.id === item.student_id)
+                        return (
+                          <div key={item.id} onClick={() => student && openHistory(student)}
+                            style={{ display:'flex', alignItems:'center', gap:12, backgroundColor:'var(--surface)', border:`1px solid ${isOverdue ? 'rgba(255,68,68,0.3)' : 'var(--border)'}`, borderRadius:12, padding:'12px 14px', cursor: student ? 'pointer' : 'default', transition:'background-color 0.15s' }}
+                            onMouseEnter={e => student && ((e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--surface-hover)')}
+                            onMouseLeave={e => student && ((e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--surface)')}>
+                            <div style={{ width:36, height:36, borderRadius:18, backgroundColor: isOverdue ? 'rgba(255,68,68,0.12)' : 'rgba(100,160,255,0.12)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                              <Calendar size={16} color={isOverdue ? '#FF4444' : '#64A0FF'} />
+                            </div>
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <p style={{ fontSize:13, fontWeight:700, color:'var(--text)', margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{item.student_name}</p>
+                              <p style={{ fontSize:11, color:'var(--text-2)', margin:'2px 0 0 0' }}>
+                                Parcela {item.installment_number}/{item.total_installments} · {PLAN_LABEL[item.plan_type]}
+                              </p>
+                            </div>
+                            <div style={{ textAlign:'right', flexShrink:0 }}>
+                              <p style={{ fontSize:14, fontWeight:700, color:'var(--text)', margin:0 }}>{formatMoney(item.amount)}</p>
+                              <p style={{ fontSize:11, fontWeight:600, color: isOverdue ? '#FF4444' : '#FF9800', margin:'2px 0 0 0' }}>
+                                {isOverdue ? 'Vencido' : 'Vence'} {formatDate(item.due_date)}
+                              </p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           )}
         </div>
       </div>
@@ -176,7 +346,7 @@ export default function Payments() {
       {/* Painel de histórico */}
       {historyStudent && (
         <div style={{ width:300, display:'flex', flexDirection:'column', borderLeft:'1px solid var(--border)', flexShrink:0, backgroundColor:'var(--bg)' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 16px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'12px 16px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
             <button onClick={() => setHistoryStudent(null)} style={{ background:'none', border:'none', color:'var(--text-2)', cursor:'pointer', padding:2 }}>
               <ChevronLeft size={18} />
             </button>
@@ -184,6 +354,12 @@ export default function Payments() {
               <p style={{ fontSize:13, fontWeight:700, color:'var(--text)', margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{historyStudent.name}</p>
               <p style={{ fontSize:11, color:'var(--text-2)', margin:0 }}>Histórico de pagamentos</p>
             </div>
+            <button
+              onClick={() => { setScheduleStudent(historyStudent); setScheduleForm({ amount_per_inst: '' }); setScheduleError(''); setShowScheduleModal(true) }}
+              title="Gerar cronograma de vencimentos"
+              style={{ padding:6, background:'none', border:'1px solid var(--border)', borderRadius:8, cursor:'pointer', color:'var(--text-2)', display:'flex', alignItems:'center' }}>
+              <Calendar size={14} />
+            </button>
             <button onClick={() => { setModalStudent(historyStudent); setForm(emptyForm); setError(''); setShowModal(true) }}
               style={{ display:'flex', alignItems:'center', gap:4, padding:'6px 10px', backgroundColor:'#E8FF00', color:'#0A0A0A', border:'none', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer', flexShrink:0 }}>
               <Plus size={12} /> Novo
@@ -196,28 +372,44 @@ export default function Payments() {
               <p style={{ color:'var(--text-2)', fontSize:13, textAlign:'center', paddingTop:40 }}>Nenhum pagamento registrado.</p>
             ) : (
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                {history.map(p => (
-                  <div key={p.id} style={{ backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:12, padding:14 }}>
-                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
-                      <span style={{ fontSize:16, fontWeight:900, color:'var(--text)' }}>{formatMoney(p.amount)}</span>
-                      <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                        <span style={{ fontSize:11, fontWeight:600, padding:'3px 8px', borderRadius:20, backgroundColor: p.status==='paid' ? 'rgba(0,200,83,0.1)' : 'rgba(255,152,0,0.1)', color: p.status==='paid' ? '#00C853' : '#FF9800' }}>
-                          {p.status === 'paid' ? 'Pago' : 'Pendente'}
-                        </span>
-                        {p.status !== 'paid' && (
+                {history.map(p => {
+                  const isScheduled = p.source === 'scheduled'
+                  const isPendingScheduled = isScheduled && (p.status === 'pending' || p.status === 'overdue')
+                  const badgeColor = p.status === 'paid' ? '#00C853' : p.status === 'overdue' ? '#FF4444' : isScheduled ? '#64A0FF' : '#FF9800'
+                  const badgeBg = p.status === 'paid' ? 'rgba(0,200,83,0.1)' : p.status === 'overdue' ? 'rgba(255,68,68,0.1)' : isScheduled ? 'rgba(100,160,255,0.1)' : 'rgba(255,152,0,0.1)'
+                  const badgeLabel = p.status === 'paid' ? 'Pago' : p.status === 'overdue' ? 'Vencido' : isScheduled ? 'Agendado' : 'Pendente'
+                  return (
+                    <div key={p.id} style={{ backgroundColor:'var(--surface)', border:`1px solid ${p.status === 'overdue' ? 'rgba(255,68,68,0.25)' : 'var(--border)'}`, borderRadius:12, padding:14 }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8 }}>
+                        <span style={{ fontSize:16, fontWeight:900, color:'var(--text)' }}>{formatMoney(p.amount)}</span>
+                        <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                          <span style={{ fontSize:11, fontWeight:600, padding:'3px 8px', borderRadius:20, backgroundColor: badgeBg, color: badgeColor }}>
+                            {badgeLabel}
+                          </span>
+                          {isPendingScheduled && (
+                            <button onClick={() => handleMarkPaid(p)} disabled={markingPaidId === p.id} title="Marcar como pago"
+                              style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:5, background:'none', border:'none', cursor: markingPaidId === p.id ? 'not-allowed' : 'pointer', color:'#00C853', opacity: markingPaidId === p.id ? 0.4 : 1, borderRadius:6 }}>
+                              <Check size={13} />
+                            </button>
+                          )}
                           <button onClick={() => handleDeletePayment(p.id)} disabled={deletingId === p.id} title="Excluir cobrança"
                             style={{ display:'flex', alignItems:'center', justifyContent:'center', padding:5, background:'none', border:'none', cursor: deletingId === p.id ? 'not-allowed' : 'pointer', color:'#FF4444', opacity: deletingId === p.id ? 0.4 : 1, borderRadius:6 }}>
                             <Trash2 size={13} />
                           </button>
-                        )}
+                        </div>
                       </div>
+                      {isScheduled && p.installment_number != null && (
+                        <p style={{ fontSize:11, color:'#64A0FF', margin:'0 0 4px 0', fontWeight:600, display:'flex', alignItems:'center', gap:4 }}>
+                          <Calendar size={10} /> Parcela {p.installment_number}/{p.total_installments}
+                        </p>
+                      )}
+                      <p style={{ fontSize:12, color:'var(--text-2)', margin:'0 0 2px 0' }}>Vencimento: <span style={{ color:'var(--text)' }}>{formatDate(p.due_date)}</span></p>
+                      {p.paid_at && <p style={{ fontSize:12, color:'var(--text-2)', margin:'0 0 2px 0' }}>Pago em: <span style={{ color:'#00C853' }}>{formatDate(p.paid_at)}</span></p>}
+                      {p.payment_method && <p style={{ fontSize:12, color:'var(--text-2)', margin:'0 0 2px 0' }}>Método: <span style={{ color:'var(--text)' }}>{p.payment_method}</span></p>}
+                      <p style={{ fontSize:12, color:'var(--text-2)', margin:0 }}>{PLAN_LABEL[p.plan_type]}</p>
                     </div>
-                    <p style={{ fontSize:12, color:'var(--text-2)', margin:'0 0 2px 0' }}>Vencimento: <span style={{ color:'var(--text)' }}>{formatDate(p.due_date)}</span></p>
-                    {p.paid_at && <p style={{ fontSize:12, color:'var(--text-2)', margin:'0 0 2px 0' }}>Pago em: <span style={{ color:'#00C853' }}>{formatDate(p.paid_at)}</span></p>}
-                    {p.payment_method && <p style={{ fontSize:12, color:'var(--text-2)', margin:'0 0 2px 0' }}>Método: <span style={{ color:'var(--text)' }}>{p.payment_method}</span></p>}
-                    <p style={{ fontSize:12, color:'var(--text-2)', margin:0 }}>{PLAN_LABEL[p.plan_type]}</p>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
@@ -236,7 +428,7 @@ export default function Payments() {
               <button onClick={() => setShowModal(false)} style={{ background:'none', border:'none', color:'var(--text-2)', cursor:'pointer', padding:4 }}><X size={18} /></button>
             </div>
             <div style={{ padding:20, display:'flex', flexDirection:'column', gap:14 }}>
-              <MField label="Valor (R$) *">
+              <MField label="Valor total do período (R$) *">
                 <input type="number" step="0.01" min="0" value={form.amount} onChange={e => setForm(p => ({ ...p, amount:e.target.value }))} placeholder="0,00" style={inputStyle}
                   onFocus={e => (e.currentTarget.style.borderColor='#E8FF00')} onBlur={e => (e.currentTarget.style.borderColor='var(--border)')} />
               </MField>
@@ -254,7 +446,12 @@ export default function Payments() {
                 </MField>
               </div>
               <div style={{ backgroundColor:'rgba(232,255,0,0.05)', border:'1px solid rgba(232,255,0,0.15)', borderRadius:10, padding:'10px 12px' }}>
-                <p style={{ fontSize:12, color:'var(--text-2)', margin:0 }}>Ao registrar, o aluno ficará <span style={{ color:'#00C853', fontWeight:600 }}>Em dia</span> e o plano será renovado por <span style={{ color:'var(--text)', fontWeight:600 }}>{PLAN_MONTHS[modalStudent.plan_type]} {PLAN_MONTHS[modalStudent.plan_type] === 1 ? 'mês' : 'meses'}</span>.</p>
+                <p style={{ fontSize:12, color:'var(--text-2)', margin:0 }}>
+                  Plano renovado por <span style={{ color:'var(--text)', fontWeight:600 }}>{PLAN_MONTHS[modalStudent.plan_type]} {PLAN_MONTHS[modalStudent.plan_type] === 1 ? 'mês' : 'meses'}</span>.
+                  {PLAN_MONTHS[modalStudent.plan_type] > 1 && form.amount && parseFloat(form.amount) > 0 && (
+                    <> Cronograma gerado: {PLAN_MONTHS[modalStudent.plan_type]}x de <span style={{ color:'#E8FF00', fontWeight:600 }}>{formatMoney(parseFloat(form.amount) / PLAN_MONTHS[modalStudent.plan_type])}</span>.</>
+                  )}
+                </p>
               </div>
               {error && <p style={{ color:'#FF4444', fontSize:12, margin:0 }}>{error}</p>}
               <div style={{ display:'flex', gap:10 }}>
@@ -268,6 +465,64 @@ export default function Payments() {
         </div>
       )}
 
+      {/* Modal Cronograma */}
+      {showScheduleModal && scheduleStudent && (() => {
+        const preview = scheduleForm.amount_per_inst && parseFloat(scheduleForm.amount_per_inst) > 0
+          ? computeSchedulePreview(scheduleStudent.plan_end, scheduleStudent.plan_type)
+          : []
+        return (
+          <div style={{ position:'fixed', inset:0, backgroundColor:'var(--overlay)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:50, padding:16 }}>
+            <div style={{ backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:20, width:'100%', maxWidth:420 }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 20px', borderBottom:'1px solid var(--border)' }}>
+                <div>
+                  <h2 style={{ fontSize:16, fontWeight:900, color:'var(--text)', margin:0 }}>Gerar Cronograma</h2>
+                  <p style={{ fontSize:12, color:'var(--text-2)', margin:'2px 0 0 0' }}>{scheduleStudent.name} · {PLAN_LABEL[scheduleStudent.plan_type]}</p>
+                </div>
+                <button onClick={() => setShowScheduleModal(false)} style={{ background:'none', border:'none', color:'var(--text-2)', cursor:'pointer', padding:4 }}><X size={18} /></button>
+              </div>
+              <div style={{ padding:20, display:'flex', flexDirection:'column', gap:14 }}>
+                <MField label="Valor por parcela (R$) *">
+                  <input type="number" step="0.01" min="0" value={scheduleForm.amount_per_inst}
+                    onChange={e => setScheduleForm(p => ({ ...p, amount_per_inst: e.target.value }))}
+                    placeholder="0,00" style={inputStyle}
+                    onFocus={e => (e.currentTarget.style.borderColor='#E8FF00')}
+                    onBlur={e => (e.currentTarget.style.borderColor='var(--border)')} />
+                </MField>
+                {preview.length > 0 && (
+                  <div style={{ backgroundColor:'rgba(100,160,255,0.05)', border:'1px solid rgba(100,160,255,0.2)', borderRadius:10, padding:'10px 14px' }}>
+                    <p style={{ fontSize:11, color:'#64A0FF', fontWeight:700, textTransform:'uppercase', letterSpacing:1, margin:'0 0 10px 0' }}>Parcelas a gerar</p>
+                    {preview.map(item => (
+                      <div key={item.installment} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+                        <span style={{ fontSize:12, color:'var(--text-2)' }}>Parcela {item.installment}/{PLAN_MONTHS[scheduleStudent.plan_type]}</span>
+                        <span style={{ fontSize:12, color:'var(--text)', fontWeight:600 }}>
+                          {formatDate(item.date)} · {formatMoney(parseFloat(scheduleForm.amount_per_inst))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {scheduleForm.amount_per_inst && parseFloat(scheduleForm.amount_per_inst) > 0 && preview.length === 0 && (
+                  <p style={{ fontSize:12, color:'var(--text-3)', margin:0, textAlign:'center' }}>Todas as parcelas já venceram. Verifique o vencimento do plano.</p>
+                )}
+                <div style={{ backgroundColor:'rgba(232,255,0,0.05)', border:'1px solid rgba(232,255,0,0.15)', borderRadius:10, padding:'10px 12px' }}>
+                  <p style={{ fontSize:12, color:'var(--text-2)', margin:0 }}>
+                    Plano vence em <span style={{ color:'var(--text)', fontWeight:600 }}>{formatDate(scheduleStudent.plan_end)}</span>.
+                    Parcelas futuras pendentes existentes serão substituídas.
+                  </p>
+                </div>
+                {scheduleError && <p style={{ color:'#FF4444', fontSize:12, margin:0 }}>{scheduleError}</p>}
+                <div style={{ display:'flex', gap:10 }}>
+                  <MBtn onClick={() => setShowScheduleModal(false)}>Cancelar</MBtn>
+                  <MBtn primary onClick={handleGenerateSchedule} disabled={scheduleSaving} style={{ flex:2 }}>
+                    {scheduleSaving ? <div style={{ width:16, height:16, border:'2px solid #0A0A0A', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} /> : <><Calendar size={14} /> Gerar Cronograma</>}
+                  </MBtn>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Modal Assinatura Recorrente */}
       {showSub && subStudent && (
         <div style={{ position:'fixed', inset:0, backgroundColor:'var(--overlay)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:50, padding:16 }}>
@@ -279,7 +534,6 @@ export default function Payments() {
               </div>
               <button onClick={() => setShowSub(false)} style={{ background:'none', border:'none', color:'var(--text-2)', cursor:'pointer', padding:4 }}><X size={18} /></button>
             </div>
-
             {subResult ? (
               <div style={{ padding:20, display:'flex', flexDirection:'column', gap:14 }}>
                 <div style={{ backgroundColor:'rgba(0,200,83,0.08)', border:'1px solid rgba(0,200,83,0.2)', borderRadius:12, padding:14, display:'flex', gap:10, alignItems:'flex-start' }}>
@@ -354,7 +608,6 @@ export default function Payments() {
             </div>
             {asaasResult ? (
               <div style={{ padding:20, display:'flex', flexDirection:'column', gap:14 }}>
-                {/* PIX */}
                 {asaasResult.pixEncodedImage && (
                   <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12 }}>
                     <p style={{ fontSize:14, fontWeight:600, color:'var(--text)', margin:0 }}>QR Code PIX</p>
@@ -367,14 +620,12 @@ export default function Payments() {
                     )}
                   </div>
                 )}
-                {/* Boleto */}
                 {asaasResult.bankSlipUrl && (
                   <a href={asaasResult.bankSlipUrl} target="_blank" rel="noopener noreferrer"
                     style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, width:'100%', padding:'12px 16px', backgroundColor:'#E8FF00', color:'#0A0A0A', borderRadius:12, fontSize:13, fontWeight:700, textDecoration:'none' }}>
                     <ExternalLink size={15} /> Abrir Boleto
                   </a>
                 )}
-                {/* Cartão de crédito / débito */}
                 {(asaasForm.billing_type === 'CREDIT_CARD' || asaasForm.billing_type === 'DEBIT_CARD') && asaasResult.invoiceUrl && (
                   <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                     <div style={{ backgroundColor:'rgba(0,200,83,0.08)', border:'1px solid rgba(0,200,83,0.2)', borderRadius:10, padding:'10px 14px' }}>
@@ -396,7 +647,6 @@ export default function Payments() {
                     </a>
                   </div>
                 )}
-                {/* Fatura genérica (PIX/Boleto) */}
                 {(asaasForm.billing_type === 'PIX' || asaasForm.billing_type === 'BOLETO') && asaasResult.invoiceUrl && (
                   <a href={asaasResult.invoiceUrl} target="_blank" rel="noopener noreferrer"
                     style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, width:'100%', padding:'11px 16px', border:'1px solid var(--border)', color:'var(--text-2)', borderRadius:12, fontSize:13, textDecoration:'none' }}>
@@ -476,7 +726,7 @@ function StudentCard({ student, onHistory, onAsaas, onManual, onSub, onUnblock, 
           <span style={{ fontSize:11, color:'var(--text-3)' }}>·</span>
           <span style={{ fontSize:11, color:'var(--text-2)' }}>{PLAN_LABEL[student.plan_type]}</span>
           <span style={{ fontSize:11, color:'var(--text-3)' }}>·</span>
-          <span style={{ fontSize:11, color:'var(--text-2)' }}>até {new Date(student.plan_end).toLocaleDateString('pt-BR')}</span>
+          <span style={{ fontSize:11, color:'var(--text-2)' }}>até {new Date(student.plan_end + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
         </div>
       </div>
       <div style={{ display:'flex', gap:6, flexShrink:0 }}>
@@ -492,6 +742,22 @@ function StudentCard({ student, onHistory, onAsaas, onManual, onSub, onUnblock, 
         )}
       </div>
     </div>
+  )
+}
+
+function TabBtn({ label, active, badge, onClick }: { label:string; active:boolean; badge?:number; onClick:()=>void }) {
+  return (
+    <button onClick={onClick}
+      style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 16px', fontSize:13, fontWeight:700, border:'none', cursor:'pointer', background:'transparent',
+        color: active ? 'var(--text)' : 'var(--text-2)',
+        borderBottom: active ? '2px solid #E8FF00' : '2px solid transparent',
+        marginBottom: -1,
+      }}>
+      {label}
+      {badge !== undefined && (
+        <span style={{ fontSize:10, backgroundColor:'#FF4444', color:'white', borderRadius:10, padding:'1px 6px', fontWeight:700 }}>{badge}</span>
+      )}
+    </button>
   )
 }
 
