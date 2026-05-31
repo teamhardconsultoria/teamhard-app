@@ -1,0 +1,36 @@
+# Mobile — tem repositório próprio
+mobile/
+
+# Claude Code — configurações locais
+.claude/
+
+# Variáveis de ambiente — NUNCA comitar
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Dependências
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+dist-ssr/
+
+# Supabase local
+supabase/.branches/
+supabase/.temp/
+web/supabase/.temp/
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.sw?
+
+# Sistema
+.DS_Store
+Thumbs.db
