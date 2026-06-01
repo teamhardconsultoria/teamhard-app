@@ -226,6 +226,7 @@ export default function Dashboard() {
     }
     calPayments.data?.forEach(p => add(p.due_date, 'payment'))
     calAssessments.data?.forEach(a => add(a.created_at.split('T')[0], 'assessment'))
+    list.forEach((s: any) => { if (s.assessment_scheduled_date) add(String(s.assessment_scheduled_date).slice(0, 10), 'assessment') })
     calWorkouts.data?.forEach(w => add(w.valid_from, 'workout'))
     calDiets.data?.forEach(d => add(d.valid_from, 'workout'))
     setCalendarEvents(events)
