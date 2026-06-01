@@ -98,9 +98,13 @@ export default function Dashboard() {
     const userIds = list.map(s => s.user_id)
     const none = ['none']
 
-    const todayStr = new Date().toISOString().split('T')[0]
-    const next7Str = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+    const next7 = new Date(now); next7.setDate(now.getDate() + 7)
+    const next7Str = `${next7.getFullYear()}-${pad(next7.getMonth() + 1)}-${pad(next7.getDate())}`
+    const ago30 = new Date(now); ago30.setDate(now.getDate() - 30)
+    const thirtyDaysAgo = `${ago30.getFullYear()}-${pad(ago30.getMonth() + 1)}-${pad(ago30.getDate())}`
 
     const rangeStart = new Date(); rangeStart.setMonth(rangeStart.getMonth() - 2); rangeStart.setDate(1)
     const rangeEnd = new Date(); rangeEnd.setMonth(rangeEnd.getMonth() + 4); rangeEnd.setDate(0)
