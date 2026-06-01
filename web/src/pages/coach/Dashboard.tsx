@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   AlertCircle, ChevronRight, ChevronLeft, X,
   ClipboardList, Activity, CreditCard,
-  UserCheck, UserX, Cake, MessageSquare, Star,
+  UserCheck, Cake, MessageSquare, Star,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
@@ -18,7 +18,7 @@ interface DashStats {
   payments7days: number
   activeStudents: number
   activeStudentsList: Student[]
-  overdueStudents: number
+
   birthdays: Student[]
   unreadFeedbacks: number
   unreadMessages: number
@@ -181,7 +181,7 @@ export default function Dashboard() {
       payments7days: payments7daysRes.count ?? 0,
       activeStudents: activeStudentsList.length,
       activeStudentsList,
-      overdueStudents: list.filter(s => s.payment_status === 'overdue').length,
+
       birthdays,
       unreadFeedbacks: feedbacksRes.count ?? 0,
       unreadMessages: messagesRes.count ?? 0,
@@ -282,14 +282,7 @@ export default function Dashboard() {
               ? () => setModal({ label: 'Alunos ativos', students: st.activeStudentsList })
               : undefined}
           />
-          <DashCard
-            icon={<UserX size={16} color={st.overdueStudents > 0 ? '#FF4444' : 'var(--text-3)'} />}
-            value={st.overdueStudents}
-            label="Alunos vencidos"
-            accent={st.overdueStudents > 0 ? '#FF4444' : undefined}
-            isAlert={st.overdueStudents > 0}
-            onClick={st.overdueStudents > 0 ? () => navigate('/coach/payments') : undefined}
-          />
+
           <DashCard
             icon={<Cake size={16} color={st.birthdays.length > 0 ? '#FF9800' : 'var(--text-3)'} />}
             value={st.birthdays.length}
