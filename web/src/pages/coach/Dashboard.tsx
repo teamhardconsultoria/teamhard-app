@@ -263,6 +263,7 @@ export default function Dashboard() {
             value={st.assessmentsScheduledToday.length}
             label="Avaliações planejadas para hoje"
             accent={st.assessmentsScheduledToday.length > 0 ? '#3B82F6' : undefined}
+            borderAccent="rgba(59,130,246,0.35)"
             onClick={st.assessmentsScheduledToday.length > 0
               ? () => setModal({ label: 'Avaliações planejadas para hoje', students: st.assessmentsScheduledToday })
               : undefined}
@@ -272,6 +273,7 @@ export default function Dashboard() {
             value={st.updatesToday}
             label="Atualizações realizadas hoje"
             accent={st.updatesToday > 0 ? '#E8FF00' : undefined}
+            borderAccent="rgba(232,255,0,0.3)"
             onClick={st.updatesTodayStudents.length > 0
               ? () => setModal({ label: 'Atualizações realizadas hoje', students: st.updatesTodayStudents })
               : undefined}
@@ -286,13 +288,13 @@ export default function Dashboard() {
               ? () => setModal({ label: 'Alunos ativos', students: st.activeStudentsList })
               : undefined}
           />
-
           <DashCard
             icon={<Cake size={16} color={st.birthdays.length > 0 ? '#FF9800' : 'var(--text-3)'} />}
             value={st.birthdays.length}
             label="Aniversariantes do dia"
             sub={st.birthdays.map(b => b.name.split(' ')[0]).join(', ') || undefined}
             accent={st.birthdays.length > 0 ? '#FF9800' : undefined}
+            borderAccent="rgba(255,152,0,0.35)"
             onClick={st.birthdays.length > 0
               ? () => setModal({ label: 'Aniversariantes do dia', students: st.birthdays })
               : undefined}
@@ -411,12 +413,12 @@ function StudentListModal({ label, students, onClose, onNavigate }: {
   )
 }
 
-function DashCard({ icon, value, label, sub, accent, isAlert, isGood, fullWidth, onClick }: {
+function DashCard({ icon, value, label, sub, accent, isAlert, isGood, fullWidth, onClick, borderAccent }: {
   icon: React.ReactNode; value: number; label: string; sub?: string;
-  accent?: string; isAlert?: boolean; isGood?: boolean; fullWidth?: boolean; onClick?: () => void
+  accent?: string; isAlert?: boolean; isGood?: boolean; fullWidth?: boolean; onClick?: () => void; borderAccent?: string
 }) {
   const [hovered, setHovered] = useState(false)
-  const borderColor = isAlert ? 'rgba(255,68,68,0.35)' : isGood ? 'rgba(0,200,83,0.25)' : 'var(--border)'
+  const borderColor = isAlert ? 'rgba(255,68,68,0.35)' : isGood ? 'rgba(0,200,83,0.25)' : borderAccent ?? 'var(--border)'
   return (
     <div
       onClick={onClick}
