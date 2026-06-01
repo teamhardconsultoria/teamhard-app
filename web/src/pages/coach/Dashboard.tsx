@@ -32,7 +32,7 @@ interface AlertItem {
 }
 
 interface CalendarEvents {
-  [dateStr: string]: { payment?: boolean; assessment?: boolean; workout?: boolean }
+  [dateStr: string]: { payment?: string[]; assessment?: string[]; workout?: string[] }
 }
 
 const s = {
@@ -67,6 +67,7 @@ export default function Dashboard() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvents>({})
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<{ label: string; students: Student[] } | null>(null)
+  const [calModal, setCalModal] = useState<{ dateStr: string; ev: CalendarEvents[string] } | null>(null)
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(() => {
     const saved = JSON.parse(localStorage.getItem(`dismissed_alerts_${user?.id}`) || '[]') as string[]
     return new Set(saved)
@@ -137,13 +138,13 @@ export default function Dashboard() {
         .in('student_id', ids.length ? ids : none)
         .gt('due_date', todayStr).lte('due_date', next7Str).eq('status', 'pending'),
 
-      supabase.from('payments').select('due_date')
+      supabase.from('payments').select('due_date, student_id')
         .in('student_id', ids.length ? ids : none).gte('due_date', rStart).lte('due_date', rEnd),
-      supabase.from('assessments').select('created_at')
+      supabase.from('assessments').select('created_at, student_id')
         .in('student_id', ids.length ? ids : none).gte('created_at', rStart).lte('created_at', rEnd + 'T23:59:59'),
-      supabase.from('workouts').select('valid_from')
+      supabase.from('workouts').select('valid_from, student_id')
         .in('student_id', ids.length ? ids : none).gte('valid_from', rStart).lte('valid_from', rEnd),
-      supabase.from('diets').select('valid_from')
+      supabase.from('diets').select('valid_from, student_id')
         .in('student_id', ids.length ? ids : none).gte('valid_from', rStart).lte('valid_from', rEnd),
 
       supabase.from('assessments').select('student_id')
@@ -219,16 +220,18 @@ export default function Dashboard() {
     }
     setAlerts(alertList)
 
+    const studentNameById = new Map(list.map((s: any) => [s.id, (s.user as any)?.name as string || '?']))
     const events: CalendarEvents = {}
-    const add = (dateStr: string, type: keyof CalendarEvents[string]) => {
+    const add = (dateStr: string, type: 'payment' | 'assessment' | 'workout', name: string) => {
       if (!events[dateStr]) events[dateStr] = {}
-      events[dateStr][type] = true
+      if (!events[dateStr][type]) events[dateStr][type] = []
+      if (!events[dateStr][type]!.includes(name)) events[dateStr][type]!.push(name)
     }
-    calPayments.data?.forEach(p => add(p.due_date, 'payment'))
-    calAssessments.data?.forEach(a => add(a.created_at.split('T')[0], 'assessment'))
-    list.forEach((s: any) => { if (s.assessment_scheduled_date) add(String(s.assessment_scheduled_date).slice(0, 10), 'assessment') })
-    calWorkouts.data?.forEach(w => add(w.valid_from, 'workout'))
-    calDiets.data?.forEach(d => add(d.valid_from, 'workout'))
+    calPayments.data?.forEach(p => add(p.due_date, 'payment', studentNameById.get(p.student_id) || '?'))
+    calAssessments.data?.forEach(a => add(a.created_at.split('T')[0], 'assessment', studentNameById.get(a.student_id) || '?'))
+    list.forEach((s: any) => { if (s.assessment_scheduled_date) add(String(s.assessment_scheduled_date).slice(0, 10), 'assessment', (s.user as any)?.name || '?') })
+    calWorkouts.data?.forEach(w => add(w.valid_from, 'workout', studentNameById.get(w.student_id) || '?'))
+    calDiets.data?.forEach(d => add(d.valid_from, 'workout', studentNameById.get(d.student_id) || '?'))
     setCalendarEvents(events)
 
     setLoading(false)
@@ -304,7 +307,7 @@ export default function Dashboard() {
 
         {/* Calendário */}
         <p style={s.sectionLabel}>Calendário</p>
-        <Calendar events={calendarEvents} />
+        <Calendar events={calendarEvents} onDayClick={(dateStr, ev) => setCalModal({ dateStr, ev })} />
 
         {/* Alertas */}
         {(() => {
@@ -353,6 +356,15 @@ export default function Dashboard() {
         </div>
 
       </div>
+
+      {/* Modal calendário */}
+      {calModal && (
+        <CalendarDayModal
+          dateStr={calModal.dateStr}
+          ev={calModal.ev}
+          onClose={() => setCalModal(null)}
+        />
+      )}
 
       {/* Modal lista de alunos */}
       {modal && (
@@ -442,7 +454,7 @@ function DashCard({ icon, value, label, sub, accent, isAlert, isGood, fullWidth,
   )
 }
 
-function Calendar({ events }: { events: CalendarEvents }) {
+function Calendar({ events, onDayClick }: { events: CalendarEvents; onDayClick: (dateStr: string, ev: CalendarEvents[string]) => void }) {
   const today = new Date()
   const [view, setView] = useState({ year: today.getFullYear(), month: today.getMonth() })
 
@@ -486,15 +498,21 @@ function Calendar({ events }: { events: CalendarEvents }) {
           const dateStr = `${view.year}-${String(view.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
           const ev = events[dateStr] || {}
           const isToday = today.getFullYear() === view.year && today.getMonth() === view.month && today.getDate() === day
-          const hasEvents = ev.payment || ev.assessment || ev.workout
+          const hasEvents = !!(ev.payment?.length || ev.assessment?.length || ev.workout?.length)
           return (
-            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '7px 2px 5px', borderRadius: 8, backgroundColor: isToday ? 'rgba(232,255,0,0.1)' : 'transparent', border: isToday ? '1px solid rgba(232,255,0,0.3)' : '1px solid transparent' }}>
+            <div
+              key={i}
+              onClick={hasEvents ? () => onDayClick(dateStr, ev) : undefined}
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '7px 2px 5px', borderRadius: 8, backgroundColor: isToday ? 'rgba(232,255,0,0.1)' : 'transparent', border: isToday ? '1px solid rgba(232,255,0,0.3)' : '1px solid transparent', cursor: hasEvents ? 'pointer' : 'default', transition: 'background-color 0.12s' }}
+              onMouseEnter={e => { if (hasEvents) (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(255,255,255,0.06)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = isToday ? 'rgba(232,255,0,0.1)' : 'transparent' }}
+            >
               <span style={{ fontSize: 13, fontWeight: isToday ? 900 : 400, color: isToday ? '#E8FF00' : '#ccc', lineHeight: 1, marginBottom: hasEvents ? 4 : 0 }}>{day}</span>
               {hasEvents && (
                 <div style={{ display: 'flex', gap: 2 }}>
-                  {ev.payment && <div style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#FF4444' }} />}
-                  {ev.assessment && <div style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#3B82F6' }} />}
-                  {ev.workout && <div style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#E8FF00' }} />}
+                  {ev.payment?.length && <div style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#FF4444' }} />}
+                  {ev.assessment?.length && <div style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#3B82F6' }} />}
+                  {ev.workout?.length && <div style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#E8FF00' }} />}
                 </div>
               )}
             </div>
@@ -508,6 +526,49 @@ function Calendar({ events }: { events: CalendarEvents }) {
             <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{label}</span>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function CalendarDayModal({ dateStr, ev, onClose }: {
+  dateStr: string
+  ev: CalendarEvents[string]
+  onClose: () => void
+}) {
+  const label = new Date(dateStr + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+  const sections = [
+    { color: '#3B82F6', title: 'Avaliação',    names: ev.assessment || [] },
+    { color: '#FF4444', title: 'Vencimento',   names: ev.payment || [] },
+    { color: '#E8FF00', title: 'Treino / Dieta', names: ev.workout || [] },
+  ].filter(s => s.names.length > 0)
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 24 }}
+      onClick={onClose}>
+      <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, width: '100%', maxWidth: 380, overflow: 'hidden' }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid var(--border)' }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0, textTransform: 'capitalize' }}>{label}</p>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', padding: 4, display: 'flex', alignItems: 'center', borderRadius: 6 }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-2)')}>
+            <X size={18} />
+          </button>
+        </div>
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {sections.map(sec => (
+            <div key={sec.title}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <div style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: sec.color, flexShrink: 0 }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.5 }}>{sec.title}</span>
+              </div>
+              {sec.names.map((name, i) => (
+                <p key={i} style={{ fontSize: 14, color: 'var(--text)', margin: '0 0 4px 16px' }}>{name}</p>
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
