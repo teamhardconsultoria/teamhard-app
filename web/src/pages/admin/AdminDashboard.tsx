@@ -58,7 +58,7 @@ export default function AdminDashboard() {
     const [{ data: allStudents }, { count: coachCount }, { data: paymentsData }] = await Promise.all([
       supabase.from('students').select('payment_status, plan_type, coach_id, created_at, coaches(users(name))'),
       supabase.from('coaches').select('id', { count: 'exact', head: true }),
-      supabase.from('payments').select('amount, status, paid_at'),
+      supabase.from('payments').select('amount, status, paid_at, due_date'),
     ])
 
     setCoaches(coachCount ?? 0)
@@ -129,7 +129,8 @@ export default function AdminDashboard() {
       paymentsData.forEach((p: any) => {
         const amount = Number(p.amount)
         if (p.status === 'pending') {
-          pending += amount
+          const dueDate = p.due_date ? new Date(p.due_date + 'T12:00:00') : null
+          if (dueDate && dueDate >= monthStart && dueDate < monthEnd) pending += amount
         } else if (p.status === 'overdue') {
           overdue += amount
         } else if (p.status === 'paid' && p.paid_at) {
@@ -171,7 +172,7 @@ export default function AdminDashboard() {
           <StatCard icon={<AlertCircle size={18} color="#ef4444" />} label="Alunos Bloqueados" value={blockedStudents} accent="#ef4444" />
           <StatCard icon={<Activity size={18} color="#E8FF00" />} label="Coaches" value={coaches} />
           <StatCard icon={<TrendingUp size={18} color="#E8FF00" />} label={`Receita — ${monthLabel}`} value={monthRevenue} isCurrency />
-          <StatCard icon={<DollarSign size={18} color="#facc15" />} label="A Receber (pendente)" value={pendingRevenue} isCurrency accent="#facc15" />
+          <StatCard icon={<DollarSign size={18} color="#facc15" />} label={`A Receber — ${monthLabel}`} value={pendingRevenue} isCurrency accent="#facc15" />
           <StatCard icon={<DollarSign size={18} color="#f97316" />} label="Em Atraso" value={overdueRevenue} isCurrency accent="#f97316" />
         </div>
 
