@@ -2,20 +2,24 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AlertCircle, ChevronRight, ChevronLeft, X,
-  ClipboardList, Activity, CreditCard, Clock,
+  ClipboardList, Activity, CreditCard,
   UserCheck, UserX, Cake, MessageSquare, Star,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 
+interface Student { id: string; name: string }
+
 interface DashStats {
-  assessmentsToday: number
+  assessmentsScheduledToday: Student[]
   updatesToday: number
+  updatesTodayStudents: Student[]
   paymentsToday: number
   payments7days: number
   activeStudents: number
+  activeStudentsList: Student[]
   overdueStudents: number
-  birthdays: { id: string; name: string }[]
+  birthdays: Student[]
   unreadFeedbacks: number
   unreadMessages: number
 }
@@ -39,8 +43,6 @@ const s = {
   date: { fontSize: 12, color: 'var(--text-2)', marginTop: 4, textTransform: 'capitalize' as const },
   grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 28 },
   card: { backgroundColor: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 14, display: 'flex', flexDirection: 'column' as const, gap: 4, cursor: 'default' as const },
-  cardAlert: { border: '1px solid rgba(255,68,68,0.35)' },
-  cardGood: { border: '1px solid rgba(0,200,83,0.25)' },
   cardValue: { fontSize: 26, fontWeight: 900, color: 'var(--text)', margin: 0, lineHeight: 1.2 },
   cardLabel: { fontSize: 11, color: 'var(--text-2)', textTransform: 'uppercase' as const, letterSpacing: 0.5, margin: 0 },
   cardSub: { fontSize: 11, color: 'var(--text-2)', margin: 0, marginTop: 2 },
@@ -64,6 +66,7 @@ export default function Dashboard() {
   const [alerts, setAlerts] = useState<AlertItem[]>([])
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvents>({})
   const [loading, setLoading] = useState(true)
+  const [modal, setModal] = useState<{ label: string; students: Student[] } | null>(null)
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(() => {
     const saved = JSON.parse(localStorage.getItem(`dismissed_alerts_${user?.id}`) || '[]') as string[]
     return new Set(saved)
@@ -87,7 +90,7 @@ export default function Dashboard() {
 
     const { data: students } = await supabase
       .from('students')
-      .select('id, user_id, payment_status, plan_end, birth_date, user:users(name)')
+      .select('id, user_id, payment_status, plan_end, birth_date, assessment_scheduled_date, user:users(name)')
       .eq('coach_id', coach.id)
 
     const list = students || []
@@ -104,11 +107,9 @@ export default function Dashboard() {
     const rStart = rangeStart.toISOString().split('T')[0]
     const rEnd = rangeEnd.toISOString().split('T')[0]
 
-    const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0)
-
     const [
       feedbacksRes, messagesRes,
-      assessmentsTodayRes, workoutsTodayRes, dietsTodayRes,
+      workoutsTodayRes, dietsTodayRes,
       paymentsTodayRes, payments7daysRes,
       calPayments, calAssessments, calWorkouts, calDiets,
       recentAssessments, allWorkouts, allDiets,
@@ -118,13 +119,10 @@ export default function Dashboard() {
       supabase.from('messages').select('id', { count: 'exact', head: true })
         .eq('receiver_id', user!.id).in('sender_id', userIds.length ? userIds : none).is('read_at', null),
 
-      supabase.from('assessments').select('id', { count: 'exact', head: true })
+      supabase.from('workouts').select('student_id')
         .in('student_id', ids.length ? ids : none)
         .gte('created_at', todayStr + 'T00:00:00').lte('created_at', todayStr + 'T23:59:59'),
-      supabase.from('workouts').select('id', { count: 'exact', head: true })
-        .in('student_id', ids.length ? ids : none)
-        .gte('created_at', todayStr + 'T00:00:00').lte('created_at', todayStr + 'T23:59:59'),
-      supabase.from('diets').select('id', { count: 'exact', head: true })
+      supabase.from('diets').select('student_id')
         .in('student_id', ids.length ? ids : none)
         .gte('created_at', todayStr + 'T00:00:00').lte('created_at', todayStr + 'T23:59:59'),
 
@@ -151,17 +149,38 @@ export default function Dashboard() {
     ])
 
     // Aniversariantes de hoje (mês/dia)
-    const todayMD = todayStr.slice(5) // "MM-DD"
-    const birthdays = list
+    const todayMD = todayStr.slice(5)
+    const birthdays: Student[] = list
       .filter((s: any) => s.birth_date && String(s.birth_date).slice(5) === todayMD)
       .map((s: any) => ({ id: s.id, name: (s.user as any)?.name || '?' }))
 
+    // Avaliações planejadas para hoje
+    const assessmentsScheduledToday: Student[] = list
+      .filter((s: any) => s.assessment_scheduled_date === todayStr)
+      .map((s: any) => ({ id: s.id, name: (s.user as any)?.name || '?' }))
+
+    // Atualizações realizadas hoje (únicos)
+    const updateTodayIds = new Set([
+      ...(workoutsTodayRes.data?.map(w => w.student_id) || []),
+      ...(dietsTodayRes.data?.map(d => d.student_id) || []),
+    ])
+    const updatesTodayStudents: Student[] = list
+      .filter((s: any) => updateTodayIds.has(s.id))
+      .map((s: any) => ({ id: s.id, name: (s.user as any)?.name || '?' }))
+
+    // Alunos ativos
+    const activeStudentsList: Student[] = list
+      .filter(s => s.payment_status === 'active')
+      .map((s: any) => ({ id: s.id, name: (s.user as any)?.name || '?' }))
+
     setStats({
-      assessmentsToday: assessmentsTodayRes.count ?? 0,
-      updatesToday: (workoutsTodayRes.count ?? 0) + (dietsTodayRes.count ?? 0),
+      assessmentsScheduledToday,
+      updatesToday: (workoutsTodayRes.data?.length ?? 0) + (dietsTodayRes.data?.length ?? 0),
+      updatesTodayStudents,
       paymentsToday: paymentsTodayRes.count ?? 0,
       payments7days: payments7daysRes.count ?? 0,
-      activeStudents: list.filter(s => s.payment_status === 'active').length,
+      activeStudents: activeStudentsList.length,
+      activeStudentsList,
       overdueStudents: list.filter(s => s.payment_status === 'overdue').length,
       birthdays,
       unreadFeedbacks: feedbacksRes.count ?? 0,
@@ -237,15 +256,21 @@ export default function Dashboard() {
         <div style={s.grid}>
           <DashCard
             icon={<ClipboardList size={16} color="#3B82F6" />}
-            value={st.assessmentsToday}
+            value={st.assessmentsScheduledToday.length}
             label="Avaliações planejadas para hoje"
-            accent={st.assessmentsToday > 0 ? '#3B82F6' : undefined}
+            accent={st.assessmentsScheduledToday.length > 0 ? '#3B82F6' : undefined}
+            onClick={st.assessmentsScheduledToday.length > 0
+              ? () => setModal({ label: 'Avaliações planejadas para hoje', students: st.assessmentsScheduledToday })
+              : undefined}
           />
           <DashCard
             icon={<Activity size={16} color="#E8FF00" />}
             value={st.updatesToday}
             label="Atualizações realizadas hoje"
             accent={st.updatesToday > 0 ? '#E8FF00' : undefined}
+            onClick={st.updatesTodayStudents.length > 0
+              ? () => setModal({ label: 'Atualizações realizadas hoje', students: st.updatesTodayStudents })
+              : undefined}
           />
           <DashCard
             icon={<UserCheck size={16} color="#00C853" />}
@@ -253,6 +278,9 @@ export default function Dashboard() {
             label="Alunos ativos"
             accent="#00C853"
             isGood
+            onClick={st.activeStudentsList.length > 0
+              ? () => setModal({ label: 'Alunos ativos', students: st.activeStudentsList })
+              : undefined}
           />
           <DashCard
             icon={<UserX size={16} color={st.overdueStudents > 0 ? '#FF4444' : 'var(--text-3)'} />}
@@ -269,6 +297,9 @@ export default function Dashboard() {
             sub={st.birthdays.map(b => b.name.split(' ')[0]).join(', ') || undefined}
             accent={st.birthdays.length > 0 ? '#FF9800' : undefined}
             fullWidth
+            onClick={st.birthdays.length > 0
+              ? () => setModal({ label: 'Aniversariantes do dia', students: st.birthdays })
+              : undefined}
           />
         </div>
 
@@ -322,6 +353,63 @@ export default function Dashboard() {
           <ActionBtn icon={<ClipboardList size={22} color="#E8FF00" />} label="Alunos" to="/coach/students" navigate={navigate} />
         </div>
 
+      </div>
+
+      {/* Modal lista de alunos */}
+      {modal && (
+        <StudentListModal
+          label={modal.label}
+          students={modal.students}
+          onClose={() => setModal(null)}
+          onNavigate={(id) => { setModal(null); navigate(`/coach/students/${id}`) }}
+        />
+      )}
+    </div>
+  )
+}
+
+function StudentListModal({ label, students, onClose, onNavigate }: {
+  label: string
+  students: Student[]
+  onClose: () => void
+  onNavigate: (id: string) => void
+}) {
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 24 }}
+      onClick={onClose}
+    >
+      <div
+        style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, width: '100%', maxWidth: 420, maxHeight: '70vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid var(--border)' }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{label}</p>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', padding: 4, display: 'flex', alignItems: 'center', borderRadius: 6 }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-2)')}>
+            <X size={18} />
+          </button>
+        </div>
+        {/* Lista */}
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {students.map((s, i) => (
+            <div
+              key={s.id}
+              onClick={() => onNavigate(s.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', cursor: 'pointer', borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--surface-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: '#E8FF00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, color: '#0A0A0A', flexShrink: 0 }}>
+                {s.name.charAt(0)}
+              </div>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', flex: 1 }}>{s.name}</span>
+              <ChevronRight size={15} color="var(--text-3)" />
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
