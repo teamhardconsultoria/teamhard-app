@@ -293,7 +293,6 @@ export default function Dashboard() {
             label="Aniversariantes do dia"
             sub={st.birthdays.map(b => b.name.split(' ')[0]).join(', ') || undefined}
             accent={st.birthdays.length > 0 ? '#FF9800' : undefined}
-            fullWidth
             onClick={st.birthdays.length > 0
               ? () => setModal({ label: 'Aniversariantes do dia', students: st.birthdays })
               : undefined}
