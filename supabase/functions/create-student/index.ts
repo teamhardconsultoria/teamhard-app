@@ -153,14 +153,14 @@ serve(async (req) => {
 
     const planEnd = calcPlanEnd(plan_start || new Date().toISOString().split('T')[0], plan_type || 'monthly')
 
-    const { error: studentError } = await supabase.from('students').insert({
+    const { data: studentData, error: studentError } = await supabase.from('students').insert({
       user_id: userId,
       coach_id,
       plan_type: plan_type || 'monthly',
       plan_start: plan_start || new Date().toISOString().split('T')[0],
       plan_end: planEnd,
       payment_status: 'pending',
-    })
+    }).select('id').single()
 
     if (studentError) {
       await supabase.auth.admin.deleteUser(userId)
@@ -172,7 +172,7 @@ serve(async (req) => {
     await sendWelcomeEmail(email.trim(), name.trim(), tempPassword)
     if (phone) await sendWhatsApp(phone.trim(), name.trim(), email.trim(), tempPassword)
 
-    return new Response(JSON.stringify({ tempPassword, phone: phone || null }), {
+    return new Response(JSON.stringify({ tempPassword, phone: phone || null, student_id: studentData?.id }), {
       status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err) {

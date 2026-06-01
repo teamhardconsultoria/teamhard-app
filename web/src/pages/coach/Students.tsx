@@ -28,10 +28,24 @@ const STATUS_LABEL: Record<string, string> = {
 const PLAN_LABEL: Record<string, string> = {
   monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual',
 }
+const PLAN_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 }
+
+function calcPlanEnd(start: string, planType: string): string {
+  const d = new Date(start + 'T12:00:00')
+  d.setMonth(d.getMonth() + (PLAN_MONTHS[planType] || 1))
+  return d.toISOString().split('T')[0]
+}
+
+function getInstallmentCount(paymentMethod: string, planType: string, creditInstallments: number): number {
+  if (paymentMethod === 'subscription') return PLAN_MONTHS[planType] || 1
+  if (paymentMethod === 'credit') return creditInstallments
+  return 1
+}
 
 const emptyForm = {
   name: '', email: '', phone: '',
   plan_type: 'monthly', plan_start: new Date().toISOString().split('T')[0],
+  payment_method: 'subscription', amount: '', installment_count: 1,
 }
 
 export default function Students() {
@@ -139,6 +153,19 @@ export default function Students() {
         },
       })
       if (fnError || data?.error) { setError(data?.error || fnError?.message || 'Erro ao criar aluno.'); return }
+
+      // Gera cronograma de parcelas se valor informado
+      if (form.amount && parseFloat(form.amount) > 0 && data.student_id) {
+        const totalInst = getInstallmentCount(form.payment_method, form.plan_type, form.installment_count)
+        await supabase.rpc('generate_payment_schedule', {
+          p_student_id: data.student_id,
+          p_plan_end: calcPlanEnd(form.plan_start, form.plan_type),
+          p_plan_type: form.plan_type,
+          p_amount_per_inst: parseFloat(form.amount) / totalInst,
+          p_total_installments: totalInst,
+        })
+      }
+
       setCreatedPassword(data.tempPassword)
       setCreatedPhone(data.phone || form.phone.trim() || null)
       supabase.from('activity_logs').insert({ coach_id: coach.id, action_type: 'created_student', details: { student_name: form.name.trim(), email: form.email.trim() } })
@@ -311,7 +338,11 @@ export default function Students() {
                   <ModalField label="Plano">
                     <select
                       value={form.plan_type}
-                      onChange={e => setForm(p => ({ ...p, plan_type: e.target.value }))}
+                      onChange={e => {
+                        const pt = e.target.value
+                        const maxInst = PLAN_MONTHS[pt] || 1
+                        setForm(p => ({ ...p, plan_type: pt, installment_count: Math.min(p.installment_count, maxInst) }))
+                      }}
                       style={{ width: '100%', padding: '12px 14px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', fontSize: 14, outline: 'none' }}
                     >
                       <option value="monthly">Mensal</option>
@@ -324,6 +355,57 @@ export default function Students() {
                     <ModalInput type="date" value={form.plan_start} onChange={v => setForm(p => ({ ...p, plan_start: v }))} />
                   </ModalField>
                 </div>
+                <ModalField label="Forma de pagamento">
+                  <select
+                    value={form.payment_method}
+                    onChange={e => setForm(p => ({ ...p, payment_method: e.target.value, installment_count: 1 }))}
+                    style={{ width: '100%', padding: '12px 14px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', fontSize: 14, outline: 'none' }}
+                    onFocus={e => (e.currentTarget.style.borderColor = '#E8FF00')}
+                    onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+                  >
+                    <option value="subscription">Assinatura / Recorrente</option>
+                    <option value="cash">Dinheiro / À vista</option>
+                    <option value="pix">PIX</option>
+                    <option value="debit">Cartão de débito</option>
+                    <option value="credit">Cartão de crédito</option>
+                  </select>
+                </ModalField>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <ModalField label="Valor do período (R$)">
+                    <ModalInput type="number" placeholder="0,00" value={form.amount} onChange={v => setForm(p => ({ ...p, amount: v }))} />
+                  </ModalField>
+                  {form.payment_method === 'credit' && (PLAN_MONTHS[form.plan_type] || 1) > 1 && (
+                    <ModalField label="Parcelas">
+                      <select
+                        value={form.installment_count}
+                        onChange={e => setForm(p => ({ ...p, installment_count: parseInt(e.target.value) }))}
+                        style={{ width: '100%', padding: '12px 14px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', fontSize: 14, outline: 'none' }}
+                        onFocus={e => (e.currentTarget.style.borderColor = '#E8FF00')}
+                        onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+                      >
+                        {Array.from({ length: PLAN_MONTHS[form.plan_type] || 1 }, (_, i) => i + 1).map(n => {
+                          const amt = parseFloat(form.amount) || 0
+                          return (
+                            <option key={n} value={n}>
+                              {n === 1 ? 'À vista' : `${n}x${amt > 0 ? ` R$${(amt / n).toFixed(2).replace('.', ',')}` : ''}`}
+                            </option>
+                          )
+                        })}
+                      </select>
+                    </ModalField>
+                  )}
+                </div>
+                {form.amount && parseFloat(form.amount) > 0 && (() => {
+                  const totalInst = getInstallmentCount(form.payment_method, form.plan_type, form.installment_count)
+                  const amtPerInst = parseFloat(form.amount) / totalInst
+                  return (
+                    <div style={{ backgroundColor: 'rgba(232,255,0,0.05)', border: '1px solid rgba(232,255,0,0.15)', borderRadius: 10, padding: '10px 12px' }}>
+                      <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0 }}>
+                        Cronograma: <span style={{ color: '#E8FF00', fontWeight: 700 }}>{totalInst}x de R${amtPerInst.toFixed(2).replace('.', ',')}</span>, 1ª parcela em <span style={{ color: 'var(--text)', fontWeight: 600 }}>{new Date(form.plan_start + 'T12:00:00').toLocaleDateString('pt-BR')}</span>.
+                      </p>
+                    </div>
+                  )
+                })()}
                 {error && <p style={{ color: '#FF4444', fontSize: 13, margin: 0 }}>{error}</p>}
                 <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
                   <ModalBtn onClick={closeModal}>Cancelar</ModalBtn>
