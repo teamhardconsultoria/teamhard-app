@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, ChevronRight, X, Copy, Check, MessageCircle, ArrowLeftRight } from 'lucide-react'
+import { Search, Plus, ChevronRight, X, Copy, Check, MessageCircle, ArrowLeftRight, UserCheck, UserX, AlertCircle, ClipboardList, RefreshCw, Cake } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 
@@ -17,6 +17,15 @@ interface StudentRow {
 interface CoachOption {
   id: string
   name: string
+}
+
+interface StudentCards {
+  active: number
+  pendingUpdate: number
+  noAssessment: number
+  overdue: number
+  birthdays: { id: string; name: string }[]
+  inactive: number
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -58,6 +67,7 @@ export default function Students() {
   const [filtered, setFiltered] = useState<StudentRow[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [cards, setCards] = useState<StudentCards | null>(null)
 
   // Create modal
   const [showModal, setShowModal] = useState(false)
@@ -124,11 +134,37 @@ export default function Students() {
     if (!coach) { setLoading(false); return }
     const { data } = await supabase
       .from('students')
-      .select('id, plan_type, payment_status, plan_end, user:users(name, email)')
+      .select('id, plan_type, payment_status, plan_end, birth_date, user:users(name, email)')
       .eq('coach_id', coach.id)
       .order('created_at', { ascending: false })
-    setStudents((data as any) ?? [])
-    setFiltered((data as any) ?? [])
+    const list = (data as any) ?? []
+    setStudents(list)
+    setFiltered(list)
+
+    const ids: string[] = list.map((s: any) => s.id)
+    if (ids.length > 0) {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
+      const todayMD = new Date().toISOString().split('T')[0].slice(5)
+      const [workoutsRes, dietsRes, assessmentsRes] = await Promise.all([
+        supabase.from('workouts').select('student_id').in('student_id', ids),
+        supabase.from('diets').select('student_id').in('student_id', ids),
+        supabase.from('assessments').select('student_id').in('student_id', ids).gte('created_at', thirtyDaysAgo + 'T00:00:00'),
+      ])
+      const withWorkout = new Set(workoutsRes.data?.map((w: any) => w.student_id) || [])
+      const withDiet = new Set(dietsRes.data?.map((d: any) => d.student_id) || [])
+      const withRecentAssessment = new Set(assessmentsRes.data?.map((a: any) => a.student_id) || [])
+      const active = list.filter((s: any) => s.payment_status === 'active')
+      setCards({
+        active: active.length,
+        pendingUpdate: active.filter((s: any) => !withWorkout.has(s.id) || !withDiet.has(s.id)).length,
+        noAssessment: active.filter((s: any) => !withRecentAssessment.has(s.id)).length,
+        overdue: list.filter((s: any) => s.payment_status === 'overdue').length,
+        birthdays: list.filter((s: any) => s.birth_date && String(s.birth_date).slice(5) === todayMD).map((s: any) => ({ id: s.id, name: (s.user as any)?.name || '?' })),
+        inactive: list.filter((s: any) => s.payment_status === 'blocked').length,
+      })
+    } else {
+      setCards({ active: 0, pendingUpdate: 0, noAssessment: 0, overdue: 0, birthdays: [], inactive: 0 })
+    }
     setLoading(false)
   }
 
@@ -243,6 +279,18 @@ export default function Students() {
             Novo Aluno
           </button>
         </div>
+
+        {/* Cards de resumo (apenas coach) */}
+        {!isSuperAdmin && cards && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 24 }}>
+            <SummaryCard icon={<UserCheck size={15} color="#00C853" />} value={cards.active} label="Alunos ativos" accent="#00C853" isGood />
+            <SummaryCard icon={<RefreshCw size={15} color={cards.pendingUpdate > 0 ? '#FF9800' : 'var(--text-3)'} />} value={cards.pendingUpdate} label="Pendentes de atualização" accent={cards.pendingUpdate > 0 ? '#FF9800' : undefined} />
+            <SummaryCard icon={<ClipboardList size={15} color={cards.noAssessment > 0 ? '#3B82F6' : 'var(--text-3)'} />} value={cards.noAssessment} label="Sem avaliação recente" accent={cards.noAssessment > 0 ? '#3B82F6' : undefined} />
+            <SummaryCard icon={<AlertCircle size={15} color={cards.overdue > 0 ? '#FF4444' : 'var(--text-3)'} />} value={cards.overdue} label="Planos vencidos" accent={cards.overdue > 0 ? '#FF4444' : undefined} isAlert={cards.overdue > 0} />
+            <SummaryCard icon={<Cake size={15} color={cards.birthdays.length > 0 ? '#FF9800' : 'var(--text-3)'} />} value={cards.birthdays.length} label="Aniversariantes hoje" sub={cards.birthdays.map(b => b.name.split(' ')[0]).join(', ') || undefined} accent={cards.birthdays.length > 0 ? '#FF9800' : undefined} />
+            <SummaryCard icon={<UserX size={15} color={cards.inactive > 0 ? '#FF4444' : 'var(--text-3)'} />} value={cards.inactive} label="Alunos inativos" accent={cards.inactive > 0 ? '#FF4444' : undefined} isAlert={cards.inactive > 0} />
+          </div>
+        )}
 
         {/* Busca */}
         <div style={{ position: 'relative', marginBottom: 20 }}>
@@ -584,6 +632,21 @@ function ModalInput({ value, onChange, placeholder, type = 'text' }: {
       onFocus={e => (e.currentTarget.style.borderColor = '#E8FF00')}
       onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
     />
+  )
+}
+
+function SummaryCard({ icon, value, label, sub, accent, isAlert, isGood }: {
+  icon: React.ReactNode; value: number; label: string; sub?: string;
+  accent?: string; isAlert?: boolean; isGood?: boolean;
+}) {
+  const borderColor = isAlert ? 'rgba(255,68,68,0.3)' : isGood ? 'rgba(0,200,83,0.2)' : 'var(--border)'
+  return (
+    <div style={{ backgroundColor: 'var(--surface)', border: `1px solid ${borderColor}`, borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {icon}
+      <p style={{ fontSize: 22, fontWeight: 900, color: accent || 'var(--text)', margin: '4px 0 0', lineHeight: 1 }}>{value}</p>
+      <p style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.5, margin: 0 }}>{label}</p>
+      {sub && <p style={{ fontSize: 11, color: 'var(--text-2)', margin: 0 }}>{sub}</p>}
+    </div>
   )
 }
 
