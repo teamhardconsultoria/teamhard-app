@@ -228,7 +228,11 @@ export default function Dashboard() {
       if (!events[dateStr][type]!.includes(name)) events[dateStr][type]!.push(name)
     }
     calPayments.data?.forEach(p => add(p.due_date, 'payment', studentNameById.get(p.student_id) || '?'))
-    calAssessments.data?.forEach(a => add(a.created_at.split('T')[0], 'assessment', studentNameById.get(a.student_id) || '?'))
+    calAssessments.data?.forEach(a => {
+      const d = new Date(a.created_at)
+      const localDate = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+      add(localDate, 'assessment', studentNameById.get(a.student_id) || '?')
+    })
     list.forEach((s: any) => { if (s.assessment_scheduled_date) add(String(s.assessment_scheduled_date).slice(0, 10), 'assessment', (s.user as any)?.name || '?') })
     calWorkouts.data?.forEach(w => add(w.valid_from, 'workout', studentNameById.get(w.student_id) || '?'))
     calDiets.data?.forEach(d => add(d.valid_from, 'workout', studentNameById.get(d.student_id) || '?'))
