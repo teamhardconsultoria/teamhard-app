@@ -77,7 +77,7 @@ export default function CoachProfile() {
       setProfileMsg({ type: 'err', text: 'Erro ao salvar. Tente novamente.' })
     } else {
       setProfileMsg({ type: 'ok', text: 'Perfil atualizado com sucesso!' })
-      initAuth()
+      await refreshUser()
     }
     setSavingProfile(false)
   }
