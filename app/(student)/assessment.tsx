@@ -6,7 +6,7 @@ import {
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
-import * as FileSystem from 'expo-file-system'
+import * as FileSystem from 'expo-file-system/legacy'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/auth'
 import { colors } from '@/lib/theme'
@@ -31,16 +31,43 @@ export default function AssessmentScreen() {
     front: null, left: null, right: null, back: null,
   })
 
-  const pickPhoto = async (angle: AssessmentAngle) => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
-      allowsEditing: true,
-      aspect: [3, 4],
-    })
-    if (!result.canceled) {
-      setPhotos(prev => ({ ...prev, [angle]: result.assets[0].uri }))
-    }
+  const pickPhoto = (angle: AssessmentAngle) => {
+    Alert.alert(
+      'Adicionar foto',
+      'Como deseja selecionar a foto?',
+      [
+        {
+          text: 'Câmera',
+          onPress: async () => {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync()
+            if (status !== 'granted') {
+              Alert.alert('Permissão necessária', 'Permita o acesso à câmera nas configurações do celular.')
+              return
+            }
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
+              quality: 0.8,
+            })
+            if (!result.canceled) {
+              setPhotos(prev => ({ ...prev, [angle]: result.assets[0].uri }))
+            }
+          },
+        },
+        {
+          text: 'Galeria',
+          onPress: async () => {
+            const result = await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              quality: 0.8,
+            })
+            if (!result.canceled) {
+              setPhotos(prev => ({ ...prev, [angle]: result.assets[0].uri }))
+            }
+          },
+        },
+        { text: 'Cancelar', style: 'cancel' },
+      ]
+    )
   }
 
   const handleSubmit = async () => {
@@ -75,8 +102,9 @@ export default function AssessmentScreen() {
 
         const filename = `assessments/${student!.id}/${assessment.id}/${angle.key}.jpg`
 
-        // Lê o arquivo como base64 e converte para Uint8Array (funciona no Android)
-        const base64 = await FileSystem.readAsStringAsync(uri, {
+        const cacheUri = `${FileSystem.cacheDirectory}assess_upload_${Date.now()}_${angle.key}.jpg`
+        await FileSystem.copyAsync({ from: uri, to: cacheUri })
+        const base64 = await FileSystem.readAsStringAsync(cacheUri, {
           encoding: FileSystem.EncodingType.Base64,
         })
         const binaryStr = atob(base64)
@@ -104,8 +132,34 @@ export default function AssessmentScreen() {
         })
       }
 
+      const { data: currentStudent } = await supabase
+        .from('students')
+        .select('initial_weight, height')
+        .eq('id', student!.id)
+        .single()
+      const profileUpdates: Record<string, unknown> = { assessment_scheduled_date: null }
+      if (!currentStudent?.height && height) profileUpdates.height = parseFloat(height)
+      if (!currentStudent?.initial_weight) profileUpdates.initial_weight = parseFloat(weight)
+      await supabase.from('students').update(profileUpdates).eq('id', student!.id)
+
+      const { data: coachUser } = await supabase
+        .from('coaches')
+        .select('user_id')
+        .eq('id', student!.coach_id)
+        .single()
+      if (coachUser) {
+        await supabase.functions.invoke('send-push-notification', {
+          body: {
+            user_id: coachUser.user_id,
+            title: '📸 Nova avaliação recebida',
+            body: `${user?.name || 'Um aluno'} enviou uma avaliação. Agende a próxima data para liberar novamente.`,
+            data: { screen: '/coach/students' },
+          },
+        })
+      }
+
       Alert.alert('Avaliação enviada!', 'Seu coach foi notificado.', [
-        { text: 'OK', onPress: () => router.back() },
+        { text: 'OK', onPress: () => router.navigate({ pathname: '/(student)/home', params: { refresh: Date.now().toString() } }) },
       ])
     } catch (err: any) {
       Alert.alert('Erro', err.message)
@@ -177,7 +231,7 @@ export default function AssessmentScreen() {
               >
                 {photos[angle.key] ? (
                   <>
-                    <Image source={{ uri: photos[angle.key]! }} style={styles.photoThumb} />
+                    <Image source={{ uri: photos[angle.key]! }} style={styles.photoThumb} resizeMode="contain" />
                     <View style={styles.photoOverlay}>
                       <Ionicons name="checkmark-circle" size={24} color={colors.yellow} />
                     </View>
