@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, ActivityIndicator, Alert, Image,
+  TextInput, ActivityIndicator, Alert, Image, Modal,
 } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -21,6 +21,7 @@ const ANGLES: { key: AssessmentAngle; label: string; icon: string }[] = [
 
 export default function AssessmentScreen() {
   const { user } = useAuthStore()
+  const [showTips, setShowTips] = useState(true)
   const [loading, setLoading] = useState(false)
 
   const [weight, setWeight] = useState('')
@@ -168,8 +169,40 @@ export default function AssessmentScreen() {
     }
   }
 
+  const TIPS = [
+    { icon: '💡', text: 'Procure um lugar bem iluminado' },
+    { icon: '📍', text: 'Tente tirar as fotos sempre no mesmo lugar' },
+    { icon: '📸', text: 'Tire foto de frente e de costas' },
+    { icon: '🙆', text: 'Tire fotos de lado (dos dois lados) com os braços erguidos' },
+    { icon: '🧍', text: 'Mantenha a postura ereta nas fotos' },
+  ]
+
   return (
     <View style={styles.container}>
+
+      <Modal visible={showTips} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.tipsCard}>
+            <View style={styles.tipsIconWrap}>
+              <Ionicons name="camera" size={28} color="#0A0A0A" />
+            </View>
+            <Text style={styles.tipsTitle}>Como tirar as fotos</Text>
+            <Text style={styles.tipsSub}>Siga as dicas para ter resultados mais precisos ao longo do tempo.</Text>
+            <View style={styles.tipsList}>
+              {TIPS.map((tip, i) => (
+                <View key={i} style={styles.tipRow}>
+                  <Text style={styles.tipIcon}>{tip.icon}</Text>
+                  <Text style={styles.tipText}>{tip.text}</Text>
+                </View>
+              ))}
+            </View>
+            <TouchableOpacity style={styles.tipsBtn} onPress={() => setShowTips(false)}>
+              <Text style={styles.tipsBtnText}>Entendi</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.back}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -353,4 +386,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitText: { fontSize: 15, fontWeight: '800', color: '#0A0A0A', letterSpacing: 2 },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  tipsCard: {
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    padding: 28,
+    width: '100%',
+    maxWidth: 380,
+    alignItems: 'center',
+    gap: 16,
+  },
+  tipsIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.yellow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tipsTitle: { fontSize: 20, fontWeight: '900', color: colors.text, textAlign: 'center' },
+  tipsSub: { fontSize: 13, color: colors.subtext, textAlign: 'center', lineHeight: 19 },
+  tipsList: { width: '100%', gap: 12 },
+  tipRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  tipIcon: { fontSize: 20, lineHeight: 24 },
+  tipText: { flex: 1, fontSize: 14, color: colors.text, lineHeight: 21 },
+  tipsBtn: {
+    backgroundColor: colors.yellow,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+    width: '100%',
+    marginTop: 4,
+  },
+  tipsBtnText: { fontSize: 15, fontWeight: '800', color: '#0A0A0A', letterSpacing: 1 },
 })
