@@ -29,6 +29,7 @@ const PLAN_LABEL: Record<string, string> = {
   monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual',
 }
 const PLAN_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 }
+const PLAN_DEFAULTS: Record<string, number> = { monthly: 299, quarterly: 807, semiannual: 1434 }
 
 function calcPlanEnd(start: string, planType: string): string {
   const d = new Date(start + 'T12:00:00')
@@ -45,7 +46,7 @@ function getInstallmentCount(paymentMethod: string, planType: string, creditInst
 const emptyForm = {
   name: '', email: '', phone: '',
   plan_type: 'monthly', plan_start: new Date().toISOString().split('T')[0],
-  payment_method: 'subscription', amount: '', installment_count: 1,
+  payment_method: 'subscription', amount: '299.00', installment_count: 1,
 }
 
 export default function Students() {
@@ -341,7 +342,8 @@ export default function Students() {
                       onChange={e => {
                         const pt = e.target.value
                         const maxInst = PLAN_MONTHS[pt] || 1
-                        setForm(p => ({ ...p, plan_type: pt, installment_count: Math.min(p.installment_count, maxInst) }))
+                        const defaultAmt = PLAN_DEFAULTS[pt] != null ? PLAN_DEFAULTS[pt].toFixed(2) : ''
+                        setForm(p => ({ ...p, plan_type: pt, installment_count: Math.min(p.installment_count, maxInst), amount: defaultAmt }))
                       }}
                       style={{ width: '100%', padding: '12px 14px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', fontSize: 14, outline: 'none' }}
                     >
