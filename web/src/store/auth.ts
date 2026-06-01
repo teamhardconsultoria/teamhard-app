@@ -7,6 +7,7 @@ interface User {
   role: 'super_admin' | 'coach' | 'student'
   name: string
   first_login: boolean
+  avatar_url?: string | null
 }
 
 interface AuthStore {
@@ -15,6 +16,7 @@ interface AuthStore {
   initAuth: () => void
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
+  refreshUser: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
@@ -40,6 +42,11 @@ export const useAuthStore = create<AuthStore>((set) => ({
   signOut: async () => {
     await supabase.auth.signOut()
     set({ user: null })
+  },
+
+  refreshUser: async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session) await fetchUser(set, session.user.id)
   },
 }))
 

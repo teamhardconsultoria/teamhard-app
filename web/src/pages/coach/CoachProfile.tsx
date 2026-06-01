@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 
 export default function CoachProfile() {
-  const { user, initAuth } = useAuthStore()
+  const { user, refreshUser } = useAuthStore()
 
   // Dados pessoais
   const [name, setName] = useState('')
@@ -56,6 +56,7 @@ export default function CoachProfile() {
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
     await supabase.from('users').update({ avatar_url: publicUrl }).eq('id', user!.id)
     setAvatarUrl(publicUrl)
+    await refreshUser()
     setUploadingAvatar(false)
   }
 

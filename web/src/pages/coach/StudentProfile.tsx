@@ -12,7 +12,7 @@ interface StudentDetail {
   plan_end: string
   access_blocked: boolean
   assessment_scheduled_date?: string | null
-  user: { name: string; email: string; phone?: string }
+  user: { name: string; email: string; phone?: string; avatar_url?: string | null }
   anamnese?: {
     goal: string; current_weight: number; height: number
     tmb?: number; get_value?: number; fitness_level?: string; biological_sex: string
@@ -172,7 +172,7 @@ export default function StudentProfile() {
   const fetchStudent = async () => {
     const { data } = await supabase.from('students').select(`
       id, user_id, plan_type, payment_status, plan_end, access_blocked, assessment_scheduled_date,
-      user:users(name, email, phone)
+      user:users(name, email, phone, avatar_url)
     `).eq('id', id).single()
 
     if (data) {
@@ -223,8 +223,10 @@ export default function StudentProfile() {
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 24, backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 20 }}>
-          <div style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#E8FF00', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 26, fontWeight: 900, color: '#0A0A0A' }}>
-            {student.user.name.charAt(0)}
+          <div style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#E8FF00', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 26, fontWeight: 900, color: '#0A0A0A' }}>
+            {student.user.avatar_url
+              ? <img src={student.user.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : student.user.name.charAt(0)}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1 style={{ fontSize: 20, fontWeight: 900, color: 'var(--text)', margin: 0 }}>{student.user.name}</h1>
