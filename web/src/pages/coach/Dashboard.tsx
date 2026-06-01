@@ -248,21 +248,6 @@ export default function Dashboard() {
             accent={st.updatesToday > 0 ? '#E8FF00' : undefined}
           />
           <DashCard
-            icon={<CreditCard size={16} color={st.paymentsToday > 0 ? '#FF4444' : 'var(--text-3)'} />}
-            value={st.paymentsToday}
-            label="Vencimentos hoje"
-            accent={st.paymentsToday > 0 ? '#FF4444' : undefined}
-            isAlert={st.paymentsToday > 0}
-            onClick={st.paymentsToday > 0 ? () => navigate('/coach/payments') : undefined}
-          />
-          <DashCard
-            icon={<Clock size={16} color={st.payments7days > 0 ? '#FF9800' : 'var(--text-3)'} />}
-            value={st.payments7days}
-            label="Vencimentos próximos 7 dias"
-            accent={st.payments7days > 0 ? '#FF9800' : undefined}
-            onClick={st.payments7days > 0 ? () => navigate('/coach/payments') : undefined}
-          />
-          <DashCard
             icon={<UserCheck size={16} color="#00C853" />}
             value={st.activeStudents}
             label="Alunos ativos"

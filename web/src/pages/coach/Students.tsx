@@ -286,7 +286,6 @@ export default function Students() {
             <SummaryCard icon={<UserCheck size={15} color="#00C853" />} value={cards.active} label="Alunos ativos" accent="#00C853" isGood />
             <SummaryCard icon={<RefreshCw size={15} color={cards.pendingUpdate > 0 ? '#FF9800' : 'var(--text-3)'} />} value={cards.pendingUpdate} label="Pendentes de atualização" accent={cards.pendingUpdate > 0 ? '#FF9800' : undefined} />
             <SummaryCard icon={<ClipboardList size={15} color={cards.noAssessment > 0 ? '#3B82F6' : 'var(--text-3)'} />} value={cards.noAssessment} label="Sem avaliação recente" accent={cards.noAssessment > 0 ? '#3B82F6' : undefined} />
-            <SummaryCard icon={<AlertCircle size={15} color={cards.overdue > 0 ? '#FF4444' : 'var(--text-3)'} />} value={cards.overdue} label="Planos vencidos" accent={cards.overdue > 0 ? '#FF4444' : undefined} isAlert={cards.overdue > 0} />
             <SummaryCard icon={<Cake size={15} color={cards.birthdays.length > 0 ? '#FF9800' : 'var(--text-3)'} />} value={cards.birthdays.length} label="Aniversariantes hoje" sub={cards.birthdays.map(b => b.name.split(' ')[0]).join(', ') || undefined} accent={cards.birthdays.length > 0 ? '#FF9800' : undefined} />
             <SummaryCard icon={<UserX size={15} color={cards.inactive > 0 ? '#FF4444' : 'var(--text-3)'} />} value={cards.inactive} label="Alunos inativos" accent={cards.inactive > 0 ? '#FF4444' : undefined} isAlert={cards.inactive > 0} />
           </div>
