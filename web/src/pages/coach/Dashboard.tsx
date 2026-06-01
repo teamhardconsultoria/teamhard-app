@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, TrendingUp, Star, MessageSquare, AlertCircle, ChevronRight, CreditCard, ChevronLeft } from 'lucide-react'
+import { Users, TrendingUp, Star, MessageSquare, AlertCircle, ChevronRight, CreditCard, ChevronLeft, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 
@@ -60,6 +60,20 @@ export default function Dashboard() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvents>({})
   const [coachId, setCoachId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(() => {
+    const saved = JSON.parse(localStorage.getItem(`dismissed_alerts_${user?.id}`) || '[]') as string[]
+    return new Set(saved)
+  })
+
+  const dismissAlert = (a: AlertItem, e: React.MouseEvent) => {
+    e.stopPropagation()
+    const key = `${a.id}:${a.reason}`
+    const storageKey = `dismissed_alerts_${user?.id}`
+    const existing = JSON.parse(localStorage.getItem(storageKey) || '[]') as string[]
+    const updated = [...new Set([...existing, key])]
+    localStorage.setItem(storageKey, JSON.stringify(updated))
+    setDismissedAlerts(new Set(updated))
+  }
 
   useEffect(() => { load() }, [])
 
@@ -229,33 +243,47 @@ export default function Dashboard() {
         <Calendar events={calendarEvents} />
 
         {/* Alertas */}
-        <p style={s.sectionLabel}>{alerts.length > 0 ? 'Requer Atenção' : 'Status'}</p>
-
-        {alerts.length === 0 ? (
-          <div style={s.allGood}>
-            <span style={{ color: '#00C853', fontSize: 16 }}>✓</span>
-            <span style={s.allGoodText}>Tudo em ordem!</span>
-          </div>
-        ) : (
-          <div style={s.alertList}>
-            {alerts.slice(0, 12).map(a => (
-              <div
-                key={a.id}
-                style={s.alertRow}
-                onClick={() => navigate(`/coach/students/${a.id}`)}
-                onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#161616')}
-                onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#111')}
-              >
-                <AlertCircle size={14} color={a.isError ? '#FF4444' : '#FF9800'} style={{ flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={s.alertName}>{a.name}</p>
-                  <p style={{ ...s.alertReason, color: a.isError ? '#FF4444' : '#FF9800' }}>{a.reason}</p>
+        {(() => {
+          const visible = alerts.filter(a => !dismissedAlerts.has(`${a.id}:${a.reason}`))
+          return (
+            <>
+              <p style={s.sectionLabel}>{visible.length > 0 ? 'Requer Atenção' : 'Status'}</p>
+              {visible.length === 0 ? (
+                <div style={s.allGood}>
+                  <span style={{ color: '#00C853', fontSize: 16 }}>✓</span>
+                  <span style={s.allGoodText}>Tudo em ordem!</span>
                 </div>
-                <ChevronRight size={14} color="#888" style={{ flexShrink: 0 }} />
-              </div>
-            ))}
-          </div>
-        )}
+              ) : (
+                <div style={s.alertList}>
+                  {visible.slice(0, 12).map(a => (
+                    <div
+                      key={`${a.id}:${a.reason}`}
+                      style={s.alertRow}
+                      onClick={() => navigate(`/coach/students/${a.id}`)}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#161616')}
+                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#111')}
+                    >
+                      <AlertCircle size={14} color={a.isError ? '#FF4444' : '#FF9800'} style={{ flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={s.alertName}>{a.name}</p>
+                        <p style={{ ...s.alertReason, color: a.isError ? '#FF4444' : '#FF9800' }}>{a.reason}</p>
+                      </div>
+                      <button
+                        onClick={e => dismissAlert(a, e)}
+                        title="Dispensar aviso"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center' }}
+                        onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-2)')}
+                        onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')}
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )
+        })()}
 
         {/* Ações Rápidas */}
         <p style={s.sectionLabel}>Ações Rápidas</p>
