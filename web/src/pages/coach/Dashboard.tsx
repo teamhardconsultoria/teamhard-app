@@ -155,12 +155,12 @@ export default function Dashboard() {
     // Aniversariantes de hoje (mês/dia)
     const todayMD = todayStr.slice(5)
     const birthdays: Student[] = list
-      .filter((s: any) => s.birth_date && String(s.birth_date).slice(5) === todayMD)
+      .filter((s: any) => s.birth_date && String(s.birth_date).slice(5, 10) === todayMD)
       .map((s: any) => ({ id: s.id, name: (s.user as any)?.name || '?' }))
 
     // Avaliações planejadas para hoje
     const assessmentsScheduledToday: Student[] = list
-      .filter((s: any) => s.assessment_scheduled_date === todayStr)
+      .filter((s: any) => s.assessment_scheduled_date && String(s.assessment_scheduled_date).slice(0, 10) === todayStr)
       .map((s: any) => ({ id: s.id, name: (s.user as any)?.name || '?' }))
 
     // Atualizações realizadas hoje (únicos)
