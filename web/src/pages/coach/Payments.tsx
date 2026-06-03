@@ -16,8 +16,8 @@ interface AgendaItem {
 
 const STATUS_COLOR: Record<string, string> = { active:'#00C853', pending:'#FF9800', overdue:'#FF4444', blocked:'#FF4444' }
 const STATUS_LABEL: Record<string, string> = { active:'Em dia', pending:'Pendente', overdue:'Vencido', blocked:'Bloqueado' }
-const PLAN_LABEL: Record<string, string> = { monthly:'Mensal', quarterly:'Trimestral', semiannual:'Semestral', annual:'Anual' }
-const PLAN_MONTHS: Record<string, number> = { monthly:1, quarterly:3, semiannual:6, annual:12 }
+const PLAN_LABEL: Record<string, string> = { monthly:'Mensal', quarterly:'Trimestral', semiannual:'Semestral', annual:'Anual', permuta:'Permuta' }
+const PLAN_MONTHS: Record<string, number> = { monthly:1, quarterly:3, semiannual:6, annual:12, permuta:0 }
 const METHODS = ['PIX','Dinheiro','Cartão de crédito','Cartão de débito','Boleto','Transferência']
 const emptyForm = { amount:'', payment_method:'PIX', due_date: new Date().toISOString().split('T')[0], paid_at: new Date().toISOString().split('T')[0] }
 const emptySub = { amount:'', billing_type:'CREDIT_CARD', due_date: new Date().toISOString().split('T')[0], cpf:'' }
@@ -64,6 +64,7 @@ export default function Payments() {
   const [asaasResult, setAsaasResult] = useState<{ pixEncodedImage?:string; pixPayload?:string; bankSlipUrl?:string; invoiceUrl?:string } | null>(null)
   const [asaasSaving, setAsaasSaving] = useState(false)
   const [asaasError, setAsaasError] = useState('')
+  const [asaasOpenChargesCount, setAsaasOpenChargesCount] = useState(0)
   const [copied, setCopied] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [showSub, setShowSub] = useState(false)
@@ -218,6 +219,20 @@ export default function Payments() {
     setDeletingId(null)
   }
 
+  const openAsaasModal = (student: StudentPayment) => {
+    setAsaasStudent(student)
+    setAsaasForm({ amount:'', billing_type:'PIX', due_date: new Date().toISOString().split('T')[0], cpf:'', installment_count: 1 })
+    setAsaasResult(null)
+    setAsaasError('')
+    setAsaasOpenChargesCount(0)
+    setShowAsaas(true)
+    supabase.from('payments').select('id', { count: 'exact', head: true })
+      .eq('student_id', student.id)
+      .not('asaas_charge_id', 'is', null)
+      .in('status', ['pending', 'overdue'])
+      .then(({ count }) => setAsaasOpenChargesCount(count || 0))
+  }
+
   const handleSub = async () => {
     if (!subForm.amount || !subStudent) { setSubError('Preencha o valor.'); return }
     setSubSaving(true); setSubError('')
@@ -283,7 +298,7 @@ export default function Payments() {
                 {filtered.map(student => (
                   <StudentCard key={student.id} student={student}
                     onHistory={() => openHistory(student)}
-                    onAsaas={() => { setAsaasStudent(student); setAsaasForm({ amount:'', billing_type:'PIX', due_date: new Date().toISOString().split('T')[0], cpf:'', installment_count: 1 }); setAsaasResult(null); setAsaasError(''); setShowAsaas(true) }}
+                    onAsaas={() => openAsaasModal(student)}
                     onManual={() => { setModalStudent(student); setForm(emptyForm); setError(''); setShowModal(true) }}
                     onSub={() => { setSubStudent(student); setSubForm(emptySub); setSubResult(null); setSubError(''); setShowSub(true) }}
                     onUnblock={() => handleUnblock(student)}
@@ -694,6 +709,14 @@ export default function Payments() {
                   <input type="text" value={asaasForm.cpf} onChange={e => setAsaasForm(p => ({ ...p, cpf:e.target.value }))} placeholder="000.000.000-00" style={inputStyle}
                     onFocus={e => (e.currentTarget.style.borderColor='#E8FF00')} onBlur={e => (e.currentTarget.style.borderColor='var(--border)')} />
                 </MField>
+                {asaasOpenChargesCount > 0 && (
+                  <div style={{ backgroundColor:'rgba(255,152,0,0.08)', border:'1px solid rgba(255,152,0,0.35)', borderRadius:10, padding:'10px 14px', display:'flex', gap:10, alignItems:'flex-start' }}>
+                    <span style={{ fontSize:16, lineHeight:'1.4', flexShrink:0 }}>⚠️</span>
+                    <p style={{ fontSize:12, color:'var(--text)', margin:0, lineHeight:'1.5' }}>
+                      <strong style={{ color:'#FF9800' }}>Atenção:</strong> este aluno já tem <strong>{asaasOpenChargesCount}</strong> cobrança{asaasOpenChargesCount !== 1 ? 's' : ''} em aberto no Asaas. Criar outra pode gerar notificações duplicadas ao aluno.
+                    </p>
+                  </div>
+                )}
                 {asaasError && <p style={{ color:'#FF4444', fontSize:12, margin:0 }}>{asaasError}</p>}
                 <div style={{ display:'flex', gap:10 }}>
                   <MBtn onClick={() => setShowAsaas(false)}>Cancelar</MBtn>
@@ -733,7 +756,9 @@ function StudentCard({ student, onHistory, onAsaas, onManual, onSub, onUnblock, 
       </div>
       <div style={{ display:'flex', gap:6, flexShrink:0 }}>
         <IconBtn onClick={onHistory} title="Histórico"><History size={15} /></IconBtn>
-        {student.payment_status === 'blocked' ? (
+        {student.plan_type === 'permuta' ? (
+          <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, backgroundColor: 'rgba(100,160,255,0.12)', color: '#64A0FF' }}>Permuta</span>
+        ) : student.payment_status === 'blocked' ? (
           <TextBtn onClick={onUnblock} primary><ShieldCheck size={12} /> Reativar</TextBtn>
         ) : (
           <>

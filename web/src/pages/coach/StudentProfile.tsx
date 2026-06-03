@@ -33,7 +33,7 @@ interface EditForm {
 }
 
 const PLAN_LABELS: Record<string, string> = {
-  monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual',
+  monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual', permuta: 'Permuta',
 }
 const STATUS_COLORS: Record<string, string> = {
   active: '#00C853', pending: '#FF9800', overdue: '#FF4444', blocked: '#FF4444',
@@ -405,6 +405,7 @@ export default function StudentProfile() {
                       <option value="quarterly">Trimestral</option>
                       <option value="semiannual">Semestral</option>
                       <option value="annual">Anual</option>
+                      <option value="permuta">Permuta</option>
                     </select>
                   </EditField>
                   <EditField label="Status de pagamento">

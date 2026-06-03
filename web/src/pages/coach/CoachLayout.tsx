@@ -1,9 +1,19 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Users, MessageSquare, CreditCard,
-  ClipboardList, LogOut, Settings, Star, FileText, Sun, Moon, Bell, Zap, UserCircle,
+  ClipboardList, LogOut, Settings, Star, FileText, Sun, Moon, Bell, Zap, UserCircle, Menu, Target,
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+  useEffect(() => {
+    const fn = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', fn)
+    return () => window.removeEventListener('resize', fn)
+  }, [])
+  return isMobile
+}
 import { useAuthStore } from '../../store/auth'
 import { getTheme, toggleTheme } from '../../store/theme'
 import { supabase } from '../../lib/supabase'
@@ -123,11 +133,17 @@ export default function CoachLayout() {
     }
   }, [location.pathname])
 
+  const isMobile = useIsMobile()
+  const [showMore, setShowMore] = useState(false)
+
+  useEffect(() => { setShowMore(false) }, [location.pathname])
+
   const totalNotifications = newAssessments + newMessages + newFeedbacks + newQuestionnaires
 
   const navItems = [
     { to: '/coach/dashboard',      icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/coach/students',       icon: Users,           label: 'Alunos' },
+    { to: '/coach/leads',          icon: Target,          label: 'CRM / Leads' },
     { to: '/coach/feedbacks',      icon: Star,            label: 'Feedbacks',     badge: newFeedbacks },
     { to: '/coach/questionnaires', icon: FileText,        label: 'Questionários', badge: newQuestionnaires },
     { to: '/coach/assessments',    icon: ClipboardList,   label: 'Avaliações',    badge: newAssessments },
@@ -137,6 +153,165 @@ export default function CoachLayout() {
     { to: '/coach/profile',        icon: UserCircle,      label: 'Meu Perfil' },
   ]
 
+  // ── Layout Mobile ──────────────────────────────────────────────
+  if (isMobile) {
+    const bottomPrimary = [
+      { to: '/coach/dashboard',   icon: LayoutDashboard, label: 'Dashboard', badge: 0 },
+      { to: '/coach/students',    icon: Users,           label: 'Alunos',    badge: 0 },
+      { to: '/coach/chat',        icon: MessageSquare,   label: 'Chat',      badge: newMessages },
+      { to: '/coach/assessments', icon: ClipboardList,   label: 'Avaliações',badge: newAssessments },
+    ]
+    const moreItems = [
+      { to: '/coach/leads',          icon: Target,     label: 'CRM / Leads',      badge: 0 },
+      { to: '/coach/feedbacks',      icon: Star,       label: 'Feedbacks',        badge: newFeedbacks },
+      { to: '/coach/questionnaires', icon: FileText,   label: 'Questionários',    badge: newQuestionnaires },
+      { to: '/coach/payments',       icon: CreditCard, label: 'Pagamentos',       badge: 0 },
+      { to: '/coach/auto-messages',  icon: Zap,        label: 'Msgs Automáticas', badge: 0 },
+      { to: '/coach/profile',        icon: UserCircle, label: 'Meu Perfil',       badge: 0 },
+    ]
+    const moreBadge = newFeedbacks + newQuestionnaires
+    const isMoreActive = moreItems.some(i => location.pathname.startsWith(i.to))
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', backgroundColor: 'var(--bg)', overflow: 'hidden' }}>
+
+        {/* ── Top Header ── */}
+        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', height: 52, borderBottom: '1px solid var(--border)', flexShrink: 0, backgroundColor: 'var(--bg)', zIndex: 10 }}>
+          <img src="/logo.png" alt="Team Hard" style={{ height: 32, objectFit: 'contain' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button onClick={handleToggle} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', padding: 8 }}>
+              {isDark ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <div ref={bellRef} style={{ position: 'relative' }}>
+              <button onClick={() => setShowBell(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: totalNotifications > 0 ? '#E8FF00' : 'var(--text-2)', padding: 8 }}>
+                <Bell size={20} />
+              </button>
+              {totalNotifications > 0 && (
+                <span style={{ position: 'absolute', top: 2, right: 2, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: '#E8FF00', color: '#0A0A0A', fontSize: 9, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', pointerEvents: 'none' }}>
+                  {totalNotifications > 99 ? '99+' : totalNotifications}
+                </span>
+              )}
+              {showBell && (
+                <div style={{ position: 'absolute', top: 40, right: 0, zIndex: 200, backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.3)', minWidth: 240, overflow: 'hidden' }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 1, padding: '12px 14px 8px', margin: 0 }}>Notificações</p>
+                  {totalNotifications === 0 ? (
+                    <p style={{ fontSize: 13, color: 'var(--text-2)', padding: '8px 14px 14px', margin: 0 }}>Nenhuma nova.</p>
+                  ) : (
+                    [
+                      { label: 'Avaliações', count: newAssessments, icon: ClipboardList, path: '/coach/assessments' },
+                      { label: 'Feedbacks', count: newFeedbacks, icon: Star, path: '/coach/feedbacks' },
+                      { label: 'Questionários', count: newQuestionnaires, icon: FileText, path: '/coach/questionnaires' },
+                      { label: 'Mensagens', count: newMessages, icon: MessageSquare, path: '/coach/chat' },
+                    ].filter(n => n.count > 0).map(n => (
+                      <button key={n.path} onClick={() => { navigate(n.path); setShowBell(false) }}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', borderTop: '1px solid var(--border)' }}
+                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--surface-hover)')}
+                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                      >
+                        <n.icon size={15} color="var(--text-2)" />
+                        <span style={{ flex: 1, fontSize: 13, color: 'var(--text)', fontWeight: 500 }}>{n.label}</span>
+                        <span style={{ minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#E8FF00', color: '#0A0A0A', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px' }}>
+                          {n.count > 99 ? '99+' : n.count}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+
+        {/* ── Content ── */}
+        <main style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <Outlet />
+        </main>
+
+        {/* ── Bottom Nav ── */}
+        <nav style={{ display: 'flex', alignItems: 'stretch', borderTop: '1px solid var(--border)', backgroundColor: 'var(--bg)', flexShrink: 0, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+          {bottomPrimary.map(item => {
+            const active = location.pathname.startsWith(item.to)
+            return (
+              <NavLink key={item.to} to={item.to} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 4px', textDecoration: 'none', position: 'relative', color: active ? '#E8FF00' : 'var(--text-2)' }}>
+                <item.icon size={22} />
+                <span style={{ fontSize: 10, fontWeight: active ? 700 : 500, letterSpacing: 0.2 }}>{item.label}</span>
+                {item.badge > 0 && (
+                  <span style={{ position: 'absolute', top: 6, left: '50%', marginLeft: 6, minWidth: 15, height: 15, borderRadius: 8, backgroundColor: '#E8FF00', color: '#0A0A0A', fontSize: 9, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>
+                    {item.badge > 99 ? '99+' : item.badge}
+                  </span>
+                )}
+              </NavLink>
+            )
+          })}
+          <button onClick={() => setShowMore(v => !v)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: '8px 4px', background: 'none', border: 'none', cursor: 'pointer', position: 'relative', color: isMoreActive || showMore ? '#E8FF00' : 'var(--text-2)' }}>
+            <Menu size={22} />
+            <span style={{ fontSize: 10, fontWeight: isMoreActive || showMore ? 700 : 500 }}>Mais</span>
+            {moreBadge > 0 && (
+              <span style={{ position: 'absolute', top: 6, left: '50%', marginLeft: 6, minWidth: 15, height: 15, borderRadius: 8, backgroundColor: '#E8FF00', color: '#0A0A0A', fontSize: 9, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>
+                {moreBadge > 99 ? '99+' : moreBadge}
+              </span>
+            )}
+          </button>
+        </nav>
+
+        {/* ── Drawer "Mais" ── */}
+        {showMore && (
+          <div onClick={() => setShowMore(false)} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 300, display: 'flex', alignItems: 'flex-end' }}>
+            <div onClick={e => e.stopPropagation()} style={{ width: '100%', backgroundColor: 'var(--surface)', borderRadius: '20px 20px 0 0', paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))', overflow: 'hidden' }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'var(--border)', margin: '12px auto 4px' }} />
+              {/* User info */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px 16px', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', backgroundColor: '#E8FF00', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 900, color: '#0A0A0A', flexShrink: 0 }}>
+                  {user?.avatar_url ? <img src={user.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : user?.name?.charAt(0)}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.name}</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0 }}>{user?.role === 'super_admin' ? 'Super Admin' : 'Coach'}</p>
+                </div>
+              </div>
+              {/* Nav items */}
+              {moreItems.map(item => {
+                const active = location.pathname.startsWith(item.to)
+                return (
+                  <button key={item.to} onClick={() => { navigate(item.to); setShowMore(false) }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', background: active ? 'rgba(232,255,0,0.07)' : 'none', border: 'none', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
+                    <item.icon size={20} color={active ? '#E8FF00' : 'var(--text-2)'} />
+                    <span style={{ flex: 1, fontSize: 15, fontWeight: active ? 700 : 500, color: active ? '#E8FF00' : 'var(--text)' }}>{item.label}</span>
+                    {item.badge > 0 && (
+                      <span style={{ minWidth: 20, height: 20, borderRadius: 10, backgroundColor: '#E8FF00', color: '#0A0A0A', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px' }}>
+                        {item.badge > 99 ? '99+' : item.badge}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+              {user?.role === 'super_admin' && (
+                <button onClick={() => { navigate('/admin'); setShowMore(false) }}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
+                  <Settings size={20} color="var(--text-2)" />
+                  <span style={{ fontSize: 15, color: 'var(--text)', fontWeight: 500 }}>Admin</span>
+                </button>
+              )}
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: 10, padding: '14px 20px 0' }}>
+                <button onClick={() => { handleToggle(); setShowMore(false) }}
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'none', border: '1px solid var(--border)', borderRadius: 12, cursor: 'pointer', color: 'var(--text-2)', fontSize: 14 }}>
+                  {isDark ? <Sun size={16} /> : <Moon size={16} />}
+                  {isDark ? 'Modo Claro' : 'Modo Escuro'}
+                </button>
+                <button onClick={async () => { await signOut(); navigate('/login') }}
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', background: 'none', border: '1px solid var(--border)', borderRadius: 12, cursor: 'pointer', color: '#FF4444', fontSize: 14 }}>
+                  <LogOut size={16} /> Sair
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Layout Desktop ──────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', height: '100vh', backgroundColor: 'var(--bg)', overflow: 'hidden' }}>
       {/* Sidebar */}

@@ -22,7 +22,8 @@ function calcPlanEnd(start: string, planType: string): string {
   switch (planType) {
     case 'quarterly':   date.setMonth(date.getMonth() + 3);  break
     case 'semiannual':  date.setMonth(date.getMonth() + 6);  break
-    case 'annual':      date.setFullYear(date.getFullYear() + 1); break
+    case 'annual':
+    case 'permuta':     date.setFullYear(date.getFullYear() + 1); break
     default:            date.setMonth(date.getMonth() + 1);  break
   }
   return date.toISOString().split('T')[0]
@@ -159,7 +160,7 @@ serve(async (req) => {
       plan_type: plan_type || 'monthly',
       plan_start: plan_start || new Date().toISOString().split('T')[0],
       plan_end: planEnd,
-      payment_status: 'pending',
+      payment_status: plan_type === 'permuta' ? 'active' : 'pending',
     }).select('id').single()
 
     if (studentError) {
