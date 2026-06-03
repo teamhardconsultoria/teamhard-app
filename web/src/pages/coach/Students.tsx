@@ -56,6 +56,7 @@ const emptyForm = {
   name: '', email: '', phone: '',
   plan_type: 'monthly', plan_start: new Date().toISOString().split('T')[0],
   payment_method: 'subscription', amount: '299.00', installment_count: 1, discount: '0',
+  cpf: '', address: '', cep: '',
 }
 
 export default function Students() {
@@ -77,6 +78,10 @@ export default function Students() {
   const [createdPhone, setCreatedPhone] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
+  const [createdStudentId, setCreatedStudentId] = useState<string | null>(null)
+  const [contractSending, setContractSending] = useState(false)
+  const [contractLink, setContractLink] = useState('')
+  const [contractError, setContractError] = useState('')
 
   // Migrate modal (super_admin only)
   const [migrateStudent, setMigrateStudent] = useState<StudentRow | null>(null)
@@ -174,6 +179,7 @@ export default function Students() {
 
   const closeModal = () => {
     setShowModal(false); setCreatedPassword(''); setCreatedPhone(null); setError('')
+    setCreatedStudentId(null); setContractLink(''); setContractError('')
   }
 
   const handleCreate = async () => {
@@ -204,6 +210,7 @@ export default function Students() {
       }
 
       setCreatedPassword(data.tempPassword)
+      setCreatedStudentId(data.student_id || null)
       setCreatedPhone(data.phone || form.phone.trim() || null)
       supabase.from('activity_logs').insert({ coach_id: coach.id, action_type: 'created_student', details: { student_name: form.name.trim(), email: form.email.trim() } })
       fetchStudents()
@@ -220,6 +227,30 @@ export default function Students() {
     )
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const sendContract = async () => {
+    setContractSending(true); setContractError('')
+    try {
+      const { data: res, error: fnErr } = await supabase.functions.invoke('send-contract', {
+        body: { student_id: createdStudentId, name: form.name, email: form.email, cpf: form.cpf, address: form.address, cep: form.cep },
+      })
+      if (fnErr || res?.error) { setContractError(res?.error || fnErr?.message || 'Erro ao enviar contrato.'); return }
+      if (res?.link) {
+        setContractLink(res.link)
+      } else if (res?.pdf_base64) {
+        const bytes = Uint8Array.from(atob(res.pdf_base64), c => c.charCodeAt(0))
+        const blob = new Blob([bytes], { type: 'application/pdf' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a'); a.href = url; a.download = 'contrato_team_hard.pdf'; a.click()
+        URL.revokeObjectURL(url)
+        setContractLink('downloaded')
+      }
+    } catch (e: any) {
+      setContractError(e.message || 'Erro inesperado.')
+    } finally {
+      setContractSending(false)
+    }
   }
 
   const openMigrate = async (e: React.MouseEvent, student: StudentRow) => {
@@ -369,6 +400,23 @@ export default function Students() {
                 <ModalBtn primary={!createdPhone} onClick={copyPassword}>
                   {copied ? <><Check size={16} /> Copiado!</> : <><Copy size={16} /> Copiar credenciais</>}
                 </ModalBtn>
+                {contractLink === 'downloaded' ? (
+                  <div style={{ backgroundColor: 'rgba(0,200,83,0.08)', border: '1px solid rgba(0,200,83,0.25)', borderRadius: 12, padding: '12px 14px' }}>
+                    <p style={{ fontSize: 13, color: '#00C853', fontWeight: 700, margin: 0 }}>Contrato baixado com sucesso!</p>
+                  </div>
+                ) : contractLink ? (
+                  <div style={{ backgroundColor: 'rgba(0,200,83,0.08)', border: '1px solid rgba(0,200,83,0.25)', borderRadius: 12, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <p style={{ fontSize: 13, color: '#00C853', fontWeight: 700, margin: 0 }}>Contrato enviado para assinatura!</p>
+                    <a href={contractLink} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--text-2)', wordBreak: 'break-all' }}>Ver link do contrato</a>
+                  </div>
+                ) : (
+                  <ModalBtn onClick={sendContract} disabled={contractSending}>
+                    {contractSending
+                      ? <div style={{ width: 16, height: 16, border: '2px solid #888', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                      : 'Enviar Contrato para Assinatura'}
+                  </ModalBtn>
+                )}
+                {contractError && <p style={{ color: '#FF4444', fontSize: 13, margin: 0 }}>{contractError}</p>}
                 <ModalBtn onClick={closeModal}>Fechar</ModalBtn>
               </div>
             ) : (
@@ -381,6 +429,15 @@ export default function Students() {
                 </ModalField>
                 <ModalField label="WhatsApp">
                   <ModalInput type="tel" placeholder="+55 11 99999-9999" value={form.phone} onChange={v => setForm(p => ({ ...p, phone: v }))} />
+                </ModalField>
+                <ModalField label="CPF">
+                  <ModalInput placeholder="000.000.000-00" value={form.cpf} onChange={v => setForm(p => ({ ...p, cpf: v }))} />
+                </ModalField>
+                <ModalField label="Endereço">
+                  <ModalInput placeholder="Rua, número, bairro, cidade/UF" value={form.address} onChange={v => setForm(p => ({ ...p, address: v }))} />
+                </ModalField>
+                <ModalField label="CEP">
+                  <ModalInput placeholder="00000-000" value={form.cep} onChange={v => setForm(p => ({ ...p, cep: v }))} />
                 </ModalField>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <ModalField label="Plano">

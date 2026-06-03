@@ -57,7 +57,7 @@ function fmtDate(date: string | null) {
 
 const emptyForm = { name: '', phone: '', email: '', source: '', notes: '', next_contact_at: '', status: 'new' }
 const PLAN_DEFAULTS: Record<string, number> = { monthly: 299, quarterly: 807, semiannual: 1434 }
-const emptyConvert = { plan_type: 'monthly', plan_start: new Date().toISOString().split('T')[0], amount: '299.00', payment_method: 'subscription', installment_count: 1, discount: '0' }
+const emptyConvert = { plan_type: 'monthly', plan_start: new Date().toISOString().split('T')[0], amount: '299.00', payment_method: 'subscription', installment_count: 1, discount: '0', cpf: '', address: '', cep: '' }
 
 export default function Leads() {
   const { user } = useAuthStore()
@@ -79,6 +79,10 @@ export default function Leads() {
   const [convertError, setConvertError] = useState('')
   const [convertedPass, setConvertedPass] = useState('')
   const [copied, setCopied]             = useState(false)
+  const [convertedStudentId, setConvertedStudentId] = useState<string | null>(null)
+  const [contractSending, setContractSending] = useState(false)
+  const [contractLink, setContractLink] = useState('')
+  const [contractError, setContractError] = useState('')
 
   // Delete confirm
   const [deleting, setDeleting] = useState<Lead | null>(null)
@@ -171,6 +175,9 @@ export default function Leads() {
     setConvertError('')
     setConvertedPass('')
     setCopied(false)
+    setConvertedStudentId(null)
+    setContractLink('')
+    setContractError('')
   }
 
   async function handleConvert() {
@@ -205,10 +212,36 @@ export default function Leads() {
       await supabase.from('leads').update({ status: 'converted', converted_student_id: data.student_id }).eq('id', converting.id)
       await fetchLeads()
       setConvertedPass(data.tempPassword)
+      setConvertedStudentId(data.student_id || null)
     } catch (e: any) {
       setConvertError(e.message || 'Erro inesperado.')
     } finally {
       setConvertSaving(false)
+    }
+  }
+
+  async function sendLeadContract() {
+    if (!converting) return
+    setContractSending(true); setContractError('')
+    try {
+      const { data: res, error: fnErr } = await supabase.functions.invoke('send-contract', {
+        body: { student_id: convertedStudentId, name: converting.name, email: converting.email, cpf: convertForm.cpf, address: convertForm.address, cep: convertForm.cep },
+      })
+      if (fnErr || res?.error) { setContractError(res?.error || fnErr?.message || 'Erro ao enviar contrato.'); return }
+      if (res?.link) {
+        setContractLink(res.link)
+      } else if (res?.pdf_base64) {
+        const bytes = Uint8Array.from(atob(res.pdf_base64), c => c.charCodeAt(0))
+        const blob = new Blob([bytes], { type: 'application/pdf' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a'); a.href = url; a.download = 'contrato_team_hard.pdf'; a.click()
+        URL.revokeObjectURL(url)
+        setContractLink('downloaded')
+      }
+    } catch (e: any) {
+      setContractError(e.message || 'Erro inesperado.')
+    } finally {
+      setContractSending(false)
     }
   }
 
@@ -382,10 +415,30 @@ export default function Leads() {
               </div>
               <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>{converting.name} virou aluno!</p>
               <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 20 }}>Senha provisória gerada com sucesso.</p>
-              <button onClick={copyConvertPass}
-                style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', gap: 8, margin: '0 auto' }}>
-                {copied ? <><Check size={15} /> Copiado!</> : <><Copy size={15} /> Copiar dados de acesso</>}
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'stretch' }}>
+                <button onClick={copyConvertPass}
+                  style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', gap: 8, margin: '0 auto' }}>
+                  {copied ? <><Check size={15} /> Copiado!</> : <><Copy size={15} /> Copiar dados de acesso</>}
+                </button>
+                {contractLink === 'downloaded' ? (
+                  <div style={{ backgroundColor: 'rgba(0,200,83,0.08)', border: '1px solid rgba(0,200,83,0.25)', borderRadius: 10, padding: '10px 14px' }}>
+                    <p style={{ fontSize: 13, color: '#00C853', fontWeight: 700, margin: 0 }}>Contrato baixado com sucesso!</p>
+                  </div>
+                ) : contractLink ? (
+                  <div style={{ backgroundColor: 'rgba(0,200,83,0.08)', border: '1px solid rgba(0,200,83,0.25)', borderRadius: 10, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <p style={{ fontSize: 13, color: '#00C853', fontWeight: 700, margin: 0 }}>Contrato enviado para assinatura!</p>
+                    <a href={contractLink} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--text-2)', wordBreak: 'break-all' }}>Ver link do contrato</a>
+                  </div>
+                ) : (
+                  <button onClick={sendLeadContract} disabled={contractSending}
+                    style={{ ...btnPrimary, backgroundColor: 'transparent', color: 'var(--text-2)', border: '1px solid var(--border)', display: 'inline-flex', alignItems: 'center', gap: 8, margin: '0 auto', opacity: contractSending ? 0.7 : 1 }}>
+                    {contractSending
+                      ? <div style={{ width: 14, height: 14, border: '2px solid #888', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                      : 'Enviar Contrato para Assinatura'}
+                  </button>
+                )}
+                {contractError && <p style={{ color: '#FF4444', fontSize: 13, margin: 0, textAlign: 'center' }}>{contractError}</p>}
+              </div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -400,6 +453,22 @@ export default function Leads() {
                   Atenção: este lead não tem e-mail cadastrado. Adicione um e-mail antes de converter.
                 </p>
               )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <Field label="CPF">
+                  <input value={convertForm.cpf} onChange={e => setConvertForm(f => ({ ...f, cpf: e.target.value }))}
+                    placeholder="000.000.000-00" style={inputStyle} />
+                </Field>
+                <Field label="CEP">
+                  <input value={convertForm.cep} onChange={e => setConvertForm(f => ({ ...f, cep: e.target.value }))}
+                    placeholder="00000-000" style={inputStyle} />
+                </Field>
+              </div>
+
+              <Field label="Endereço">
+                <input value={convertForm.address} onChange={e => setConvertForm(f => ({ ...f, address: e.target.value }))}
+                  placeholder="Rua, número, bairro, cidade/UF" style={inputStyle} />
+              </Field>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <Field label="Plano">
