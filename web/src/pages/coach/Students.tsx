@@ -397,7 +397,7 @@ export default function Students() {
                       <option value="monthly">Mensal</option>
                       <option value="quarterly">Trimestral</option>
                       <option value="semiannual">Semestral</option>
-                      <option value="annual">Anual</option>
+
                       <option value="permuta">Permuta</option>
                     </select>
                   </ModalField>

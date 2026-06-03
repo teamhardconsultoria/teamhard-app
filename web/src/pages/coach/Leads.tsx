@@ -36,7 +36,7 @@ const SOURCE_MAP = Object.fromEntries(SOURCES.map(s => [s.key, s]))
 const STATUS_MAP  = Object.fromEntries(STATUSES.map(s => [s.key, s]))
 
 const PLAN_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12, permuta: 12 }
-const PLAN_LABEL:  Record<string, string>  = { monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual', permuta: 'Permuta' }
+const PLAN_LABEL:  Record<string, string>  = { monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', permuta: 'Permuta' }
 
 function calcPlanEnd(start: string, planType: string) {
   const d = new Date(start + 'T12:00:00')
