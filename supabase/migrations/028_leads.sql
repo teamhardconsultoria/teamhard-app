@@ -1,7 +1,14 @@
-create type lead_status as enum ('new', 'contacted', 'interested', 'converted', 'lost');
-create type lead_source as enum ('instagram', 'referral', 'whatsapp', 'website', 'other');
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'lead_status') then
+    create type lead_status as enum ('new', 'contacted', 'interested', 'converted', 'lost');
+  end if;
+  if not exists (select 1 from pg_type where typname = 'lead_source') then
+    create type lead_source as enum ('instagram', 'referral', 'whatsapp', 'website', 'other');
+  end if;
+end $$;
 
-create table public.leads (
+create table if not exists public.leads (
   id                   uuid primary key default uuid_generate_v4(),
   coach_id             uuid not null references public.coaches(id) on delete cascade,
   name                 text not null,
@@ -18,12 +25,14 @@ create table public.leads (
 
 alter table public.leads enable row level security;
 
+drop policy if exists "coaches_manage_own_leads" on public.leads;
 create policy "coaches_manage_own_leads"
   on public.leads
   for all
   using (coach_id = (select id from public.coaches where user_id = auth.uid()))
   with check (coach_id = (select id from public.coaches where user_id = auth.uid()));
 
+drop trigger if exists trg_leads_updated_at on public.leads;
 create trigger trg_leads_updated_at
   before update on public.leads
   for each row execute function public.handle_updated_at();
