@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { Plus, X, Phone, Mail, Calendar, MessageCircle, UserCheck, Pencil, Trash2, Copy, Check } from 'lucide-react'
+import { Plus, X, Phone, Mail, Calendar, MessageCircle, UserCheck, Pencil, Trash2, Copy, Check, Instagram } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 
@@ -8,6 +8,7 @@ interface Lead {
   name: string
   phone: string | null
   email: string | null
+  instagram: string | null
   source: string | null
   status: string
   notes: string | null
@@ -55,7 +56,7 @@ function fmtDate(date: string | null) {
   return `${d}/${m}/${y}`
 }
 
-const emptyForm = { name: '', phone: '', email: '', source: '', notes: '', next_contact_at: '', status: 'new' }
+const emptyForm = { name: '', phone: '', email: '', instagram: '', source: '', notes: '', next_contact_at: '', status: 'new' }
 const PLAN_DEFAULTS: Record<string, number> = { monthly: 299, quarterly: 807, semiannual: 1434 }
 const emptyConvert = { plan_type: 'monthly', plan_start: new Date().toISOString().split('T')[0], amount: '299.00', payment_method: 'subscription', installment_count: 1, discount: '0', cpf: '', address: '', cep: '' }
 
@@ -122,6 +123,7 @@ export default function Leads() {
       name:            lead.name,
       phone:           lead.phone || '',
       email:           lead.email || '',
+      instagram:       lead.instagram || '',
       source:          lead.source || '',
       notes:           lead.notes || '',
       next_contact_at: lead.next_contact_at || '',
@@ -139,6 +141,7 @@ export default function Leads() {
       name:            form.name.trim(),
       phone:           form.phone.trim() || null,
       email:           form.email.trim() || null,
+      instagram:       form.instagram.trim().replace(/^@/, '') || null,
       source:          form.source || null,
       notes:           form.notes.trim() || null,
       next_contact_at: form.next_contact_at || null,
@@ -360,6 +363,14 @@ export default function Leads() {
                   placeholder="email@exemplo.com" style={inputStyle} />
               </Field>
             </div>
+
+            <Field label="Instagram">
+              <div style={{ position: 'relative' }}>
+                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-2)', fontSize: 14, pointerEvents: 'none' }}>@</span>
+                <input value={form.instagram} onChange={e => setForm(f => ({ ...f, instagram: e.target.value.replace(/^@/, '') }))}
+                  placeholder="usuario" style={{ ...inputStyle, paddingLeft: 28 }} />
+              </div>
+            </Field>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label="Origem">
@@ -605,6 +616,12 @@ function LeadCard({ lead, statusColor, onEdit, onDelete, onConvert, onMove }: {
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             <Mail size={11} /> {lead.email}
           </span>
+        )}
+        {lead.instagram && (
+          <a href={`https://instagram.com/${lead.instagram}`} target="_blank" rel="noreferrer"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#E1306C', textDecoration: 'none' }}>
+            <Instagram size={11} /> @{lead.instagram}
+          </a>
         )}
         {lead.next_contact_at && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: overdue ? '#FF4444' : 'var(--text-2)', fontWeight: overdue ? 700 : 400 }}>
