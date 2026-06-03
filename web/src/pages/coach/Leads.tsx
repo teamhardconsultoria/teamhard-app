@@ -588,7 +588,6 @@ function LeadCard({ lead, statusColor, onEdit, onDelete, onConvert, onMove }: {
   const src = lead.source ? SOURCE_MAP[lead.source] : null
   const overdue = isOverdue(lead.next_contact_at)
   const waPhone = lead.phone ? `https://wa.me/55${lead.phone.replace(/\D/g, '')}` : null
-  const isConverted = lead.status === 'converted'
 
   return (
     <div style={{
@@ -646,7 +645,7 @@ function LeadCard({ lead, statusColor, onEdit, onDelete, onConvert, onMove }: {
           </a>
         )}
 
-        {!isConverted && (
+        {!lead.converted_student_id && (
           <button onClick={onConvert}
             style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: '#00C853', backgroundColor: 'rgba(0,200,83,0.1)', border: '1px solid rgba(0,200,83,0.25)', borderRadius: 7, padding: '4px 9px', cursor: 'pointer' }}>
             <UserCheck size={12} /> Converter
