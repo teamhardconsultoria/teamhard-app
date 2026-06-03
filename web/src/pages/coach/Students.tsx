@@ -429,9 +429,6 @@ export default function Students() {
                       </select>
                     </ModalField>
                     <div style={{ display: 'flex', gap: 12 }}>
-                      <ModalField label="Valor total (R$)">
-                        <ModalInput type="number" placeholder="0,00" value={form.amount} onChange={v => setForm(p => ({ ...p, amount: v }))} />
-                      </ModalField>
                       <ModalField label="Desconto (%)">
                         <ModalInput
                           type="number" placeholder="0" value={form.discount}
@@ -442,6 +439,13 @@ export default function Students() {
                             setForm(p => ({ ...p, discount: v, amount: finalAmt }))
                           }}
                         />
+                      </ModalField>
+                      <ModalField label="Valor total (R$)">
+                        <div style={{ width: '100%', padding: '12px 14px', backgroundColor: 'rgba(232,255,0,0.06)', border: '1px solid rgba(232,255,0,0.2)', borderRadius: 10, color: '#E8FF00', fontSize: 15, fontWeight: 800, boxSizing: 'border-box' as const, letterSpacing: 0.3 }}>
+                          {parseFloat(form.amount || '0') > 0
+                            ? `R$ ${parseFloat(form.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                            : '—'}
+                        </div>
                       </ModalField>
                     </div>
                     <div style={{ display: 'flex', gap: 12 }}>

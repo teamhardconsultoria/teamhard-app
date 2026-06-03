@@ -418,10 +418,6 @@ export default function Leads() {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <Field label="Valor total (R$)">
-                  <input type="number" min="0" step="0.01" value={convertForm.amount}
-                    onChange={e => setConvertForm(f => ({ ...f, amount: e.target.value }))} style={inputStyle} />
-                </Field>
                 <Field label="Desconto (%)">
                   <input type="number" min="0" max="100" step="1" placeholder="0"
                     value={convertForm.discount}
@@ -431,6 +427,13 @@ export default function Leads() {
                       const finalAmt = base != null ? (base * (1 - d / 100)).toFixed(2) : convertForm.amount
                       setConvertForm(f => ({ ...f, discount: e.target.value, amount: finalAmt }))
                     }} style={inputStyle} />
+                </Field>
+                <Field label="Valor total (R$)">
+                  <div style={{ padding: '10px 12px', backgroundColor: 'rgba(232,255,0,0.06)', border: '1px solid rgba(232,255,0,0.2)', borderRadius: 9, color: '#E8FF00', fontSize: 15, fontWeight: 800, letterSpacing: 0.3 }}>
+                    {parseFloat(convertForm.amount || '0') > 0
+                      ? `R$ ${parseFloat(convertForm.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+                      : '—'}
+                  </div>
                 </Field>
               </div>
 
