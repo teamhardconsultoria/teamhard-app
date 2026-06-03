@@ -55,7 +55,7 @@ function getInstallmentCount(paymentMethod: string, planType: string, creditInst
 const emptyForm = {
   name: '', email: '', phone: '',
   plan_type: 'monthly', plan_start: new Date().toISOString().split('T')[0],
-  payment_method: 'subscription', amount: '299.00', installment_count: 1,
+  payment_method: 'subscription', amount: '299.00', installment_count: 1, discount: '0',
 }
 
 export default function Students() {
@@ -390,7 +390,7 @@ export default function Students() {
                         const pt = e.target.value
                         const maxInst = PLAN_MONTHS[pt] || 1
                         const defaultAmt = pt === 'permuta' ? '' : (PLAN_DEFAULTS[pt] != null ? PLAN_DEFAULTS[pt].toFixed(2) : '')
-                        setForm(p => ({ ...p, plan_type: pt, installment_count: Math.min(p.installment_count, maxInst), amount: defaultAmt }))
+                        setForm(p => ({ ...p, plan_type: pt, installment_count: Math.min(p.installment_count, maxInst), amount: defaultAmt, discount: '0' }))
                       }}
                       style={{ width: '100%', padding: '12px 14px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', fontSize: 14, outline: 'none' }}
                     >
@@ -429,9 +429,22 @@ export default function Students() {
                       </select>
                     </ModalField>
                     <div style={{ display: 'flex', gap: 12 }}>
-                      <ModalField label="Valor do período (R$)">
+                      <ModalField label="Valor total (R$)">
                         <ModalInput type="number" placeholder="0,00" value={form.amount} onChange={v => setForm(p => ({ ...p, amount: v }))} />
                       </ModalField>
+                      <ModalField label="Desconto (%)">
+                        <ModalInput
+                          type="number" placeholder="0" value={form.discount}
+                          onChange={v => {
+                            const d = Math.max(0, Math.min(100, parseFloat(v) || 0))
+                            const base = PLAN_DEFAULTS[form.plan_type]
+                            const finalAmt = base != null ? (base * (1 - d / 100)).toFixed(2) : form.amount
+                            setForm(p => ({ ...p, discount: v, amount: finalAmt }))
+                          }}
+                        />
+                      </ModalField>
+                    </div>
+                    <div style={{ display: 'flex', gap: 12 }}>
                       {form.payment_method === 'credit' && (PLAN_MONTHS[form.plan_type] || 1) > 1 && (
                         <ModalField label="Parcelas">
                           <select

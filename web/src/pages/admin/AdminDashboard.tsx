@@ -170,7 +170,6 @@ export default function AdminDashboard() {
           <StatCard icon={<Users size={18} color="#E8FF00" />} label="Total de Alunos" value={totalStudents} />
           <StatCard icon={<UserCheck size={18} color="#22c55e" />} label="Alunos Ativos" value={activeStudents} accent="#22c55e" />
           <StatCard icon={<AlertCircle size={18} color="#ef4444" />} label="Alunos Bloqueados" value={blockedStudents} accent="#ef4444" />
-          <StatCard icon={<Activity size={18} color="#E8FF00" />} label="Coaches" value={coaches} />
           <StatCard icon={<TrendingUp size={18} color="#E8FF00" />} label={`Receita — ${monthLabel}`} value={monthRevenue} isCurrency />
           <StatCard icon={<DollarSign size={18} color="#facc15" />} label={`A Receber — ${monthLabel}`} value={pendingRevenue} isCurrency accent="#facc15" />
           <StatCard icon={<DollarSign size={18} color="#f97316" />} label="Em Atraso" value={overdueRevenue} isCurrency accent="#f97316" />
