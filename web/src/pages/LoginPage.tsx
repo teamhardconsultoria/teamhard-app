@@ -15,7 +15,7 @@ export default function LoginPage() {
       return (
         <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
           <div style={{ width: '100%', maxWidth: 360, textAlign: 'center' }}>
-            <img src="/logo.jpeg" alt="Método Acelera!" style={{ width: 88, height: 88, objectFit: 'contain', borderRadius: 16, margin: '0 auto 24px' }} />
+            <img src="/logo.jpeg" alt="Método Acelera!" style={{ width: 200, height: 200, objectFit: 'contain', margin: '0 auto 24px' }} />
             <p style={{ color: 'var(--text)', fontSize: 18, fontWeight: 900, marginBottom: 8 }}>Acesso pelo App</p>
             <p style={{ color: 'var(--text-2)', fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
               Alunos devem acessar pelo aplicativo Método Acelera! no celular.
@@ -56,7 +56,7 @@ export default function LoginPage() {
           <img
             src="/logo.jpeg"
             alt="Método Acelera!"
-            style={{ width: 88, height: 88, objectFit: 'contain', borderRadius: 16, marginBottom: 16 }}
+            style={{ width: 200, height: 200, objectFit: 'contain', marginBottom: 8 }}
           />
           <p style={{ color: 'var(--text-2)', fontSize: 11, letterSpacing: 4, textTransform: 'uppercase' }}>
             Consultoria Esportiva

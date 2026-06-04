@@ -177,7 +177,7 @@ export default function CoachLayout() {
 
         {/* ── Top Header ── */}
         <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', height: 52, borderBottom: '1px solid var(--border)', flexShrink: 0, backgroundColor: 'var(--bg)', zIndex: 10 }}>
-          <img src="/logo.jpeg" alt="Método Acelera!" style={{ height: 32, objectFit: 'contain' }} />
+          <img src="/logo.jpeg" alt="Método Acelera!" style={{ height: 44, objectFit: 'contain' }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <button onClick={handleToggle} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', padding: 8 }}>
               {isDark ? <Sun size={18} /> : <Moon size={18} />}
