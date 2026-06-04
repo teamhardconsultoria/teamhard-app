@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  RefreshControl, Alert,
+  RefreshControl, Alert, Image,
 } from 'react-native'
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
@@ -105,9 +105,13 @@ export default function HomeScreen() {
           <Text style={styles.date}>{todayName.charAt(0).toUpperCase() + todayName.slice(1)}, {todayDate}</Text>
         </View>
         <TouchableOpacity onPress={() => router.push('/(student)/profile')}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{user?.name?.charAt(0).toUpperCase()}</Text>
-          </View>
+          {user?.avatar_url ? (
+            <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{user?.name?.charAt(0).toUpperCase()}</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 

@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking, Image, ActivityIndicator } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as Notifications from 'expo-notifications'
+import * as ImagePicker from 'expo-image-picker'
 import Constants from 'expo-constants'
 import { useAuthStore } from '@/store/auth'
 import { supabase } from '@/lib/supabase'
 import { colors } from '@/lib/theme'
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuthStore()
+  const { user, setUser, signOut } = useAuthStore()
   const [notifStatus, setNotifStatus] = useState<'granted' | 'denied' | 'undetermined'>('undetermined')
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     Notifications.getPermissionsAsync().then(({ status }) => {
@@ -55,12 +57,65 @@ export default function ProfileScreen() {
     }
   }
 
+  const handlePickPhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert('Permissão necessária', 'Permita o acesso à galeria nas configurações do celular.')
+      return
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    })
+
+    if (result.canceled || !result.assets[0]) return
+
+    setUploading(true)
+    try {
+      const uri = result.assets[0].uri
+      const response = await fetch(uri)
+      const blob = await response.blob()
+
+      const path = `${user!.id}/profile.jpg`
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
+
+      if (uploadError) throw uploadError
+
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path)
+      const avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`
+
+      await supabase.from('users').update({ avatar_url: avatarUrl }).eq('id', user!.id)
+      setUser({ ...user!, avatar_url: avatarUrl })
+    } catch (e: any) {
+      Alert.alert('Erro ao enviar foto', e?.message || String(e))
+    } finally {
+      setUploading(false)
+    }
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{user?.name?.charAt(0).toUpperCase()}</Text>
-        </View>
+        <TouchableOpacity onPress={handlePickPhoto} activeOpacity={0.8} style={styles.avatarWrap}>
+          {user?.avatar_url ? (
+            <Image source={{ uri: user.avatar_url }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{user?.name?.charAt(0).toUpperCase()}</Text>
+            </View>
+          )}
+          <View style={styles.cameraOverlay}>
+            {uploading
+              ? <ActivityIndicator size="small" color="#0A0A0A" />
+              : <Ionicons name="camera" size={14} color="#0A0A0A" />
+            }
+          </View>
+        </TouchableOpacity>
         <Text style={styles.name}>{user?.name}</Text>
         <Text style={styles.email}>{user?.email}</Text>
       </View>
@@ -100,6 +155,7 @@ function MenuItem({ icon, label, onPress }: { icon: any; label: string; onPress:
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.dark, paddingTop: 60 },
   header: { alignItems: 'center', padding: 32, gap: 8 },
+  avatarWrap: { position: 'relative', marginBottom: 4 },
   avatar: {
     width: 80,
     height: 80,
@@ -107,9 +163,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.yellow,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
   },
   avatarText: { fontSize: 32, fontWeight: '900', color: '#0A0A0A' },
+  cameraOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.yellow,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.dark,
+  },
   name: { fontSize: 20, fontWeight: '800', color: colors.text },
   email: { fontSize: 14, color: colors.subtext },
   menu: { borderTopWidth: 1, borderTopColor: colors.border },
