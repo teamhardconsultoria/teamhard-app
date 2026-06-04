@@ -3,6 +3,7 @@ import { Plus, X, Check, History, Zap, Copy, ExternalLink, ChevronLeft, Trash2, 
 import { sendAutoMessage } from '../../lib/autoMessage'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
+import { useIsMobile } from '../../hooks/useIsMobile'
 
 interface StudentPayment { id:string; name:string; email:string; plan_type:string; payment_status:string; plan_end:string; plan_start:string }
 interface Payment {
@@ -43,6 +44,7 @@ function computeSchedulePreview(planStart: string, planType: string) {
 
 export default function Payments() {
   const { user } = useAuthStore()
+  const isMobile = useIsMobile()
   const [coachId, setCoachId] = useState<string | null>(null)
   const [students, setStudents] = useState<StudentPayment[]>([])
   const [filter, setFilter] = useState<Filter>('all')
@@ -262,7 +264,7 @@ export default function Payments() {
     <div style={{ flex:1, display:'flex', overflow:'hidden', backgroundColor:'var(--bg)' }}>
       {/* Painel principal */}
       <div style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0, overflow:'hidden' }}>
-        <div style={{ padding:'20px 24px 0', flexShrink:0 }}>
+        <div style={{ padding: isMobile ? '16px 16px 0' : '20px 24px 0', flexShrink:0 }}>
           <h1 style={{ fontSize:22, fontWeight:900, color:'var(--text)', margin:0 }}>Pagamentos</h1>
           <p style={{ fontSize:12, color:'var(--text-2)', margin:'4px 0 12px 0' }}>{students.length} aluno{students.length !== 1 ? 's' : ''}</p>
           {/* Tabs */}
@@ -362,7 +364,10 @@ export default function Payments() {
 
       {/* Painel de histórico */}
       {historyStudent && (
-        <div style={{ width:300, display:'flex', flexDirection:'column', borderLeft:'1px solid var(--border)', flexShrink:0, backgroundColor:'var(--bg)' }}>
+        <div style={isMobile
+          ? { position:'fixed', inset:0, zIndex:50, display:'flex', flexDirection:'column', backgroundColor:'var(--bg)' }
+          : { width:300, display:'flex', flexDirection:'column', borderLeft:'1px solid var(--border)', flexShrink:0, backgroundColor:'var(--bg)' }
+        }>
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'12px 16px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
             <button onClick={() => setHistoryStudent(null)} style={{ background:'none', border:'none', color:'var(--text-2)', cursor:'pointer', padding:2 }}>
               <ChevronLeft size={18} />

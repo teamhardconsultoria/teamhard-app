@@ -5,16 +5,8 @@ import {
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
-  useEffect(() => {
-    const fn = () => setIsMobile(window.innerWidth < 768)
-    window.addEventListener('resize', fn)
-    return () => window.removeEventListener('resize', fn)
-  }, [])
-  return isMobile
-}
 import { useAuthStore } from '../../store/auth'
+import { useIsMobile } from '../../hooks/useIsMobile'
 import { getTheme, toggleTheme } from '../../store/theme'
 import { supabase } from '../../lib/supabase'
 

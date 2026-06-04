@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
+import { useIsMobile } from '../../hooks/useIsMobile'
 
 interface Student { id: string; name: string }
 
@@ -62,6 +63,7 @@ const s = {
 export default function Dashboard() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const [stats, setStats] = useState<DashStats | null>(null)
   const [alerts, setAlerts] = useState<AlertItem[]>([])
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvents>({})
@@ -252,7 +254,7 @@ export default function Dashboard() {
 
   return (
     <div style={s.page}>
-      <div style={s.content}>
+      <div style={{ ...s.content, padding: isMobile ? '20px 16px 48px' : '40px 32px 48px' }}>
 
         {/* Header */}
         <div style={s.header}>

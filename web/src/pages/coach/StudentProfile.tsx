@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Dumbbell, Salad, ClipboardList, MessageSquare, User, Scale, Activity, List, TrendingUp, History, KeyRound, Copy, Check, CalendarClock, X, ShieldOff, ShieldCheck, Pencil } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
+import { useIsMobile } from '../../hooks/useIsMobile'
 
 interface StudentDetail {
   id: string
@@ -53,6 +54,7 @@ export default function StudentProfile() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
   const isSuperAdmin = user?.role === 'super_admin'
+  const isMobile = useIsMobile()
   const [student, setStudent] = useState<StudentDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [resetting, setResetting] = useState(false)
@@ -211,7 +213,7 @@ export default function StudentProfile() {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', backgroundColor: 'var(--bg)' }}>
-      <div style={{ padding: 32, paddingTop: 40, paddingBottom: 48, maxWidth: 720 }}>
+      <div style={{ padding: isMobile ? '16px 16px 48px' : '40px 32px 48px', maxWidth: 720 }}>
 
         {/* Voltar */}
         <button onClick={() => navigate('/coach/students')}
