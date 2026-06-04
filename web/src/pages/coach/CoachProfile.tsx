@@ -48,14 +48,21 @@ export default function CoachProfile() {
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (file.size > 3 * 1024 * 1024) { setProfileMsg({ type: 'err', text: 'Imagem muito grande. Limite de 3MB.' }); return }
     setUploadingAvatar(true)
+    setProfileMsg(null)
     const ext = file.name.split('.').pop() ?? 'jpg'
     const path = `${user!.id}/avatar.${ext}`
-    const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
-    if (upErr) { setUploadingAvatar(false); return }
+    const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type })
+    if (upErr) {
+      setProfileMsg({ type: 'err', text: 'Erro ao enviar foto: ' + upErr.message })
+      setUploadingAvatar(false)
+      return
+    }
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
-    await supabase.from('users').update({ avatar_url: publicUrl }).eq('id', user!.id)
-    setAvatarUrl(publicUrl)
+    const urlWithBust = `${publicUrl}?t=${Date.now()}`
+    await supabase.from('users').update({ avatar_url: urlWithBust }).eq('id', user!.id)
+    setAvatarUrl(urlWithBust)
     await refreshUser()
     setUploadingAvatar(false)
   }
