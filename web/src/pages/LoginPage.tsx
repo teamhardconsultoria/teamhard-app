@@ -15,7 +15,7 @@ export default function LoginPage() {
       return (
         <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
           <div style={{ width: '100%', maxWidth: 360, textAlign: 'center' }}>
-            <img src="/logo.png" alt="Team Hard" style={{ width: 88, height: 88, objectFit: 'contain', borderRadius: 16, margin: '0 auto 24px' }} />
+            <img src="/logo.jpeg" alt="Team Hard" style={{ width: 88, height: 88, objectFit: 'contain', borderRadius: 16, margin: '0 auto 24px' }} />
             <p style={{ color: 'var(--text)', fontSize: 18, fontWeight: 900, marginBottom: 8 }}>Acesso pelo App</p>
             <p style={{ color: 'var(--text-2)', fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
               Alunos devem acessar pelo aplicativo Team Hard no celular.
@@ -54,7 +54,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 40 }}>
           <img
-            src="/logo.png"
+            src="/logo.jpeg"
             alt="Team Hard"
             style={{ width: 88, height: 88, objectFit: 'contain', borderRadius: 16, marginBottom: 16 }}
           />
