@@ -112,13 +112,18 @@ export default function ChatScreen() {
     setSending(false)
   }
 
-  const sendPhoto = async () => {
+  const sendFile = async () => {
     if (!partnerId) return
-    const result = await DocumentPicker.getDocumentAsync({ type: 'image/*', copyToCacheDirectory: true })
+    const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true })
     if (result.canceled) return
     const asset = result.assets[0]
-    const mimeType = asset.mimeType || 'image/jpeg'
-    const ext = mimeType.split('/')[1] || 'jpg'
+    if (asset.size && asset.size > 3 * 1024 * 1024) {
+      Alert.alert('Arquivo muito grande', 'O limite é de 3MB.')
+      return
+    }
+    const mimeType = asset.mimeType || 'application/octet-stream'
+    const isImage = mimeType.startsWith('image/')
+    const ext = asset.name?.split('.').pop() || (isImage ? 'jpg' : 'bin')
     const filename = `chat/${user!.id}/${Date.now()}.${ext}`
     try {
       const cacheUri = `${FileSystem.cacheDirectory}chat_upload_${Date.now()}.${ext}`
@@ -128,11 +133,16 @@ export default function ChatScreen() {
       const { error: uploadError } = await supabase.storage.from('chat-media').upload(filename, bytes, { contentType: mimeType })
       if (uploadError) { Alert.alert('Erro no upload', uploadError.message); return }
       const { data: { publicUrl } } = supabase.storage.from('chat-media').getPublicUrl(filename)
+      const msgType = isImage ? 'photo' : 'file'
+      const msgContent = isImage ? '' : (asset.name || 'Arquivo')
       const { data: inserted, error } = await supabase.from('messages')
-        .insert({ sender_id: user!.id, receiver_id: partnerId, content: '', type: 'photo', file_url: publicUrl })
+        .insert({ sender_id: user!.id, receiver_id: partnerId, content: msgContent, type: msgType, file_url: publicUrl })
         .select('id, sender_id, content, type, file_url, read_at, created_at').single()
       if (error) { Alert.alert('Erro ao enviar', error.message); return }
       if (inserted) setMessages(prev => [...prev, inserted])
+      supabase.functions.invoke('send-push-notification', {
+        body: { user_id: partnerId, title: user!.name || 'Aluno', body: isImage ? '📷 Foto' : `📎 ${asset.name || 'Arquivo'}`, data: { screen: mode === 'coach' ? '/(coach)/chat' : '/(admin)/support' }, channel_id: 'messages' },
+      })
     } catch (e: any) { Alert.alert('Erro', e.message) }
   }
 
@@ -191,9 +201,11 @@ export default function ChatScreen() {
         <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
           {item.type === 'audio' && item.file_url
             ? <AudioBubble uri={item.file_url} isMe={isMe} />
-            : item.file_url
-              ? <Image source={{ uri: item.file_url }} style={styles.msgImage} resizeMode="cover" />
-              : <Text style={[styles.msgText, isMe && styles.msgTextMe]}>{item.content}</Text>
+            : item.type === 'file' && item.file_url
+              ? <FileBubble uri={item.file_url} name={item.content || 'Arquivo'} isMe={isMe} />
+              : item.file_url
+                ? <Image source={{ uri: item.file_url }} style={styles.msgImage} resizeMode="cover" />
+                : <Text style={[styles.msgText, isMe && styles.msgTextMe]}>{item.content}</Text>
           }
         </View>
         <Text style={styles.msgTime}>
@@ -256,8 +268,8 @@ export default function ChatScreen() {
           </>
         ) : (
           <>
-            <TouchableOpacity style={styles.attachBtn} onPress={sendPhoto}>
-              <Ionicons name="image" size={22} color={colors.subtext} />
+            <TouchableOpacity style={styles.attachBtn} onPress={sendFile}>
+              <Ionicons name="attach" size={22} color={colors.subtext} />
             </TouchableOpacity>
             <TextInput
               style={styles.input}
@@ -285,6 +297,19 @@ export default function ChatScreen() {
         )}
       </View>
     </KeyboardAvoidingView>
+  )
+}
+
+function FileBubble({ uri, name, isMe }: { uri: string; name: string; isMe: boolean }) {
+  return (
+    <TouchableOpacity
+      onPress={() => Linking.openURL(uri)}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 120, maxWidth: 200 }}
+      activeOpacity={0.7}
+    >
+      <Ionicons name="document-attach" size={22} color={isMe ? '#0A0A0A' : colors.yellow} />
+      <Text style={{ fontSize: 13, color: isMe ? '#0A0A0A' : colors.text, flex: 1 }} numberOfLines={2}>{name}</Text>
+    </TouchableOpacity>
   )
 }
 
