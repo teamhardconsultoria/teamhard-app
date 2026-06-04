@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, Alert,
 } from 'react-native'
-import { router } from 'expo-router'
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/auth'
@@ -17,38 +17,46 @@ interface HomeData {
   lastAssessment: Assessment | null
   pendingQuestionnaires: number
   studentStatus: { payment_status: string; plan_end: string } | null
+  assessmentScheduledDate: string | null
+  pendingPayments: number
 }
 
 export default function HomeScreen() {
   const { user } = useAuthStore()
   const [data, setData] = useState<HomeData>({
     workout: null, diet: null, unreadMessages: 0,
-    lastAssessment: null, pendingQuestionnaires: 0, studentStatus: null,
+    lastAssessment: null, pendingQuestionnaires: 0, studentStatus: null, assessmentScheduledDate: null, pendingPayments: 0,
   })
   const [refreshing, setRefreshing] = useState(false)
+  const today = new Date().toISOString().split('T')[0]
 
   const fetchData = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0]
 
       const { data: student, error: studentErr } = await supabase
         .from('students')
-        .select('id, payment_status, plan_end')
+        .select('id, payment_status, plan_end, assessment_scheduled_date, access_blocked')
         .eq('user_id', user!.id)
         .single()
 
       if (studentErr) { Alert.alert('Erro (student)', studentErr.message); return }
       if (!student) { Alert.alert('Erro', 'Aluno não encontrado no banco.'); return }
 
-      const [workoutRes, dietRes, msgRes, assessRes, questRes] = await Promise.all([
-        supabase.from('workouts').select('*, days:workout_days(*)').eq('student_id', student.id).eq('active', true).lte('valid_from', today).gte('valid_to', today).maybeSingle(),
-        supabase.from('diets').select('*, days:diet_days(*)').eq('student_id', student.id).eq('active', true).lte('valid_from', today).gte('valid_to', today).maybeSingle(),
+      if ((student as any).access_blocked) {
+        router.replace('/(student)/blocked')
+        return
+      }
+
+      const [workoutRes, dietRes, msgRes, assessRes, questRes, paymentsRes] = await Promise.all([
+        supabase.from('workouts').select('*, days:workout_days(*)').eq('student_id', student.id).eq('active', true).order('valid_from', { ascending: false }).limit(1).maybeSingle(),
+        supabase.from('diets').select('*, days:diet_days(*)').eq('student_id', student.id).eq('active', true).order('valid_from', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('messages').select('id', { count: 'exact', head: true }).eq('receiver_id', user!.id).is('read_at', null),
         supabase.from('assessments').select('*').eq('student_id', student.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
         Promise.all([
           supabase.from('questionnaire_assignments').select('id', { count: 'exact', head: true }).eq('student_id', student.id),
           supabase.from('questionnaire_responses').select('id', { count: 'exact', head: true }).eq('student_id', student.id),
         ]),
+        supabase.from('payments').select('id', { count: 'exact', head: true }).eq('student_id', student.id).eq('status', 'pending'),
       ])
 
       const [questAssignRes, questRespRes] = questRes
@@ -61,13 +69,18 @@ export default function HomeScreen() {
         lastAssessment: assessRes.data,
         pendingQuestionnaires,
         studentStatus: { payment_status: student.payment_status, plan_end: student.plan_end },
+        assessmentScheduledDate: (student as any).assessment_scheduled_date || null,
+        pendingPayments: paymentsRes.count || 0,
       })
     } catch (e: any) {
       Alert.alert('Erro home', e?.message || String(e))
     }
   }
 
-  useEffect(() => { fetchData() }, [])
+  const { refresh } = useLocalSearchParams<{ refresh?: string }>()
+
+  useFocusEffect(useCallback(() => { fetchData() }, []))
+  useEffect(() => { if (refresh) fetchData() }, [refresh])
 
   const onRefresh = async () => {
     setRefreshing(true)
@@ -150,6 +163,8 @@ export default function HomeScreen() {
         <QuickLink
           icon="camera"
           label="Avaliação"
+          locked={!!data.lastAssessment && (!data.assessmentScheduledDate || data.assessmentScheduledDate !== today)}
+          scheduledDate={data.assessmentScheduledDate}
           onPress={() => router.push('/(student)/assessment')}
         />
         <QuickLink
@@ -158,12 +173,32 @@ export default function HomeScreen() {
           onPress={() => router.push('/(student)/evolution')}
         />
         <QuickLink
-          icon="clipboard"
-          label="Questionários"
-          badge={data.pendingQuestionnaires}
-          onPress={() => router.push('/(student)/questionnaires')}
+          icon="card"
+          label="Pagamentos"
+          badge={data.pendingPayments}
+          onPress={() => router.push('/(student)/payments')}
         />
       </View>
+
+      {/* Questionários pendentes */}
+      {data.pendingQuestionnaires > 0 && (
+        <TouchableOpacity
+          style={styles.questCard}
+          onPress={() => router.push('/(student)/questionnaires')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.questLeft}>
+            <View style={styles.questBadge}>
+              <Text style={styles.questBadgeText}>{data.pendingQuestionnaires}</Text>
+            </View>
+            <View>
+              <Text style={styles.questTitle}>Questionário{data.pendingQuestionnaires > 1 ? 's' : ''} pendente{data.pendingQuestionnaires > 1 ? 's' : ''}</Text>
+              <Text style={styles.questSub}>Seu coach enviou perguntas para você</Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.subtext} />
+        </TouchableOpacity>
+      )}
 
       {/* Última avaliação */}
       {data.lastAssessment && (
@@ -197,11 +232,18 @@ function SectionCard({ icon, title, children, onPress }: any) {
   )
 }
 
-function QuickLink({ icon, label, badge, onPress }: any) {
+function QuickLink({ icon, label, badge, onPress, locked, scheduledDate }: any) {
+  const handlePress = () => {
+    if (locked) {
+      Alert.alert('Avaliação indisponível', 'Não há avaliações disponível, aguarde agendamento pelo coach.')
+      return
+    }
+    onPress()
+  }
   return (
-    <TouchableOpacity style={styles.quickLink} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.quickLink, locked && { opacity: 0.5 }]} onPress={handlePress} activeOpacity={0.7}>
       <View style={styles.quickLinkIcon}>
-        <Ionicons name={icon} size={22} color={colors.yellow} />
+        <Ionicons name={locked ? 'lock-closed' : icon} size={22} color={locked ? colors.subtext : colors.yellow} />
         {badge > 0 && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
@@ -301,6 +343,24 @@ const styles = StyleSheet.create({
   },
   badgeText: { fontSize: 10, fontWeight: '800', color: '#0A0A0A' },
   quickLinkLabel: { fontSize: 11, color: colors.subtext, fontWeight: '600', textAlign: 'center' },
+  questCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: `${colors.yellow}10`,
+    borderWidth: 1,
+    borderColor: `${colors.yellow}30`,
+    borderRadius: 14,
+    padding: 16,
+  },
+  questLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  questBadge: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: colors.yellow,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  questBadgeText: { fontSize: 15, fontWeight: '900', color: '#0A0A0A' },
+  questTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
+  questSub: { fontSize: 12, color: colors.subtext, marginTop: 2 },
   infoCard: {
     backgroundColor: colors.card,
     borderWidth: 1,
