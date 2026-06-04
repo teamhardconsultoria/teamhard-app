@@ -12,23 +12,8 @@ export default function LoginPage() {
 
   if (user) {
     if (user.role === 'student') {
-      return (
-        <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-          <div style={{ width: '100%', maxWidth: 360, textAlign: 'center' }}>
-            <img src="/logo.jpeg" alt="Método Acelera!" style={{ width: 200, height: 200, objectFit: 'contain', margin: '0 auto 24px' }} />
-            <p style={{ color: 'var(--text)', fontSize: 18, fontWeight: 900, marginBottom: 8 }}>Acesso pelo App</p>
-            <p style={{ color: 'var(--text-2)', fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
-              Alunos devem acessar pelo aplicativo Método Acelera! no celular.
-            </p>
-            <button
-              onClick={() => { useAuthStore.getState().signOut() }}
-              style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-2)', borderRadius: 12, padding: '12px 24px', fontSize: 13, cursor: 'pointer' }}
-            >
-              Sair
-            </button>
-          </div>
-        </div>
-      )
+      navigate('/student/home', { replace: true })
+      return null
     }
     navigate(user.role === 'super_admin' ? '/admin' : '/coach', { replace: true })
     return null

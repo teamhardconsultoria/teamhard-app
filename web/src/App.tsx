@@ -29,6 +29,13 @@ import Coaches from './pages/admin/Coaches'
 import SupportChat from './pages/admin/SupportChat'
 import ActivityLogs from './pages/admin/ActivityLogs'
 import Settings from './pages/admin/Settings'
+import StudentLayout from './pages/student/StudentLayout'
+import StudentHome from './pages/student/StudentHome'
+import StudentWorkout from './pages/student/StudentWorkout'
+import StudentDiet from './pages/student/StudentDiet'
+import StudentChat from './pages/student/StudentChat'
+import StudentPayments from './pages/student/StudentPayments'
+import StudentProfilePage from './pages/student/StudentProfile'
 
 function PrivateRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }) {
   const { user, loading } = useAuthStore()
@@ -91,6 +98,21 @@ export default function App() {
         <Route path="support" element={<SupportChat />} />
         <Route path="activity" element={<ActivityLogs />} />
         <Route path="settings" element={<Settings />} />
+      </Route>
+
+      {/* Painel do Aluno */}
+      <Route path="/student" element={
+        <PrivateRoute allowedRoles={['student']}>
+          <StudentLayout />
+        </PrivateRoute>
+      }>
+        <Route index element={<Navigate to="home" replace />} />
+        <Route path="home" element={<StudentHome />} />
+        <Route path="workout" element={<StudentWorkout />} />
+        <Route path="diet" element={<StudentDiet />} />
+        <Route path="chat" element={<StudentChat />} />
+        <Route path="payments" element={<StudentPayments />} />
+        <Route path="profile" element={<StudentProfilePage />} />
       </Route>
 
       <Route path="/" element={<Navigate to="/coach/dashboard" replace />} />
