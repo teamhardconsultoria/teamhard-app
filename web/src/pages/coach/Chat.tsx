@@ -89,7 +89,7 @@ export default function Chat() {
         .order('created_at', { ascending: false }).limit(1).maybeSingle()
       const { count: unreadSup } = await supabase.from('messages').select('id', { count:'exact', head:true })
         .eq('sender_id', saId).eq('receiver_id', user!.id).is('read_at', null)
-      convs.unshift({ studentId: 'support', studentUserId: saId, name: 'Suporte', email: 'Fale com o suporte Team Hard', lastMessage: lastSup?.content, lastType: lastSup?.type, lastAt: lastSup?.created_at, unread: unreadSup || 0 })
+      convs.unshift({ studentId: 'support', studentUserId: saId, name: 'Suporte', email: 'Fale com o suporte Método Acelera!', lastMessage: lastSup?.content, lastType: lastSup?.type, lastAt: lastSup?.created_at, unread: unreadSup || 0 })
     }
     setConversations(convs)
   }

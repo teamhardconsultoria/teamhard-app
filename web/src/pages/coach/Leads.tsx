@@ -251,7 +251,7 @@ export default function Leads() {
   function copyConvertPass() {
     if (!converting || !convertedPass) return
     navigator.clipboard.writeText(
-      `Olá ${converting.name}! Seu acesso ao Team Hard:\nE-mail: ${converting.email}\nSenha provisória: ${convertedPass}\nBaixe o app e faça login.`
+      `Olá ${converting.name}! Seu acesso ao Método Acelera!:\nE-mail: ${converting.email}\nSenha provisória: ${convertedPass}\nBaixe o app e faça login.`
     )
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)

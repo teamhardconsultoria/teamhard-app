@@ -7,7 +7,7 @@ import { AutoMessageType } from '../../lib/autoMessage'
 type AllTemplateType = 'welcome' | 'anamnese_reminder' | AutoMessageType
 
 const DEFAULTS: Record<AllTemplateType, string> = {
-  welcome: 'Olá, {student_name}! 👋 Seja bem-vindo(a) ao Team Hard! Estou aqui para te ajudar a alcançar seus objetivos. Qualquer dúvida é só me chamar aqui no chat. Bora juntos! 💪',
+  welcome: 'Olá, {student_name}! 👋 Seja bem-vindo(a) ao Método Acelera!! Estou aqui para te ajudar a alcançar seus objetivos. Qualquer dúvida é só me chamar aqui no chat. Bora juntos! 💪',
   anamnese_reminder: 'Olá, {student_name}! 📋 Para começarmos bem, preencha sua anamnese e envie sua avaliação física inicial pelo app. Essas informações são essenciais para eu montar o plano ideal para você. Qualquer dúvida, é só chamar! 💪',
   workout_assigned: 'Olá, {student_name}! 💪 Seu novo treino já está disponível no app. Acesse agora e bora treinar!',
   diet_assigned: 'Olá, {student_name}! 🥗 Sua nova dieta já está disponível no app. Qualquer dúvida, é só falar!',

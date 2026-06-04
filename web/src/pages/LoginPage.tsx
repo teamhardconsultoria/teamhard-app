@@ -15,10 +15,10 @@ export default function LoginPage() {
       return (
         <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
           <div style={{ width: '100%', maxWidth: 360, textAlign: 'center' }}>
-            <img src="/logo.jpeg" alt="Team Hard" style={{ width: 88, height: 88, objectFit: 'contain', borderRadius: 16, margin: '0 auto 24px' }} />
+            <img src="/logo.jpeg" alt="Método Acelera!" style={{ width: 88, height: 88, objectFit: 'contain', borderRadius: 16, margin: '0 auto 24px' }} />
             <p style={{ color: 'var(--text)', fontSize: 18, fontWeight: 900, marginBottom: 8 }}>Acesso pelo App</p>
             <p style={{ color: 'var(--text-2)', fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
-              Alunos devem acessar pelo aplicativo Team Hard no celular.
+              Alunos devem acessar pelo aplicativo Método Acelera! no celular.
             </p>
             <button
               onClick={() => { useAuthStore.getState().signOut() }}
@@ -55,7 +55,7 @@ export default function LoginPage() {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 40 }}>
           <img
             src="/logo.jpeg"
-            alt="Team Hard"
+            alt="Método Acelera!"
             style={{ width: 88, height: 88, objectFit: 'contain', borderRadius: 16, marginBottom: 16 }}
           />
           <p style={{ color: 'var(--text-2)', fontSize: 11, letterSpacing: 4, textTransform: 'uppercase' }}>
@@ -141,7 +141,7 @@ export default function LoginPage() {
             rel="noopener noreferrer"
             style={{ color: 'var(--accent-text)', fontSize: 14, fontWeight: 700, textDecoration: 'none', display: 'block', marginBottom: 4 }}
           >
-            Entre já para o Team Hard
+            Entre já para o Método Acelera!
           </a>
           <a
             href="https://teamhardconsultoria.github.io"

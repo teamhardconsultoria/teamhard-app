@@ -44,7 +44,7 @@ export default function AdminLayout() {
       <aside style={{ width: 256, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border)', flexShrink: 0 }}>
         {/* Logo */}
         <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
-          <img src="/logo.jpeg" alt="Team Hard" style={{ height: 100, objectFit: 'contain', objectPosition: 'left', display: 'block', maxWidth: '100%' }} />
+          <img src="/logo.jpeg" alt="Método Acelera!" style={{ height: 100, objectFit: 'contain', objectPosition: 'left', display: 'block', maxWidth: '100%' }} />
           <p style={{ fontSize: 11, color: '#E8FF00', fontWeight: 700, margin: '6px 0 0 0' }}>Super Admin</p>
         </div>
 

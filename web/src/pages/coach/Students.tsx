@@ -223,7 +223,7 @@ export default function Students() {
 
   const copyPassword = () => {
     navigator.clipboard.writeText(
-      `Olá ${form.name}! Seu acesso ao Team Hard:\nE-mail: ${form.email}\nSenha provisória: ${createdPassword}\nBaixe o app e faça login.`
+      `Olá ${form.name}! Seu acesso ao Método Acelera!:\nE-mail: ${form.email}\nSenha provisória: ${createdPassword}\nBaixe o app e faça login.`
     )
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
@@ -389,7 +389,7 @@ export default function Students() {
                       const digits = createdPhone.replace(/\D/g, '')
                       const firstName = form.name.split(' ')[0]
                       const msg = encodeURIComponent(
-                        `Olá, ${firstName}! 💪 Seja bem-vindo(a) ao *Team Hard*!\n\nSeu acesso ao app foi criado:\n📧 E-mail: ${form.email}\n🔑 Senha provisória: *${createdPassword}*\n\nNo primeiro acesso você será solicitado(a) a criar uma nova senha.\n\n_Team Hard Consultoria Esportiva_`
+                        `Olá, ${firstName}! 💪 Seja bem-vindo(a) ao *Método Acelera!*!\n\nSeu acesso ao app foi criado:\n📧 E-mail: ${form.email}\n🔑 Senha provisória: *${createdPassword}*\n\nNo primeiro acesso você será solicitado(a) a criar uma nova senha.\n\n_Método Acelera! Consultoria Esportiva_`
                       )
                       window.open(`https://wa.me/${digits}?text=${msg}`, '_blank')
                     }}
