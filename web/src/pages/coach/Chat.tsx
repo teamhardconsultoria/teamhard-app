@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Send, MessageSquare, Search, Mic, MicOff, Play, Pause, ImageIcon, X } from 'lucide-react'
+import { Send, MessageSquare, Search, Mic, MicOff, Play, Pause, Paperclip, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 
@@ -129,17 +129,20 @@ export default function Chat() {
     loadConversations(coachId, superAdminUserId)
   }
 
-  const sendPhoto = async (file: File) => {
+  const sendFile = async (file: File) => {
     if (!selected) return
-    const ext = file.name.split('.').pop() || 'jpg'
+    if (file.size > 3 * 1024 * 1024) { alert('Arquivo muito grande. O limite é de 3MB.'); return }
+    const isImage = file.type.startsWith('image/')
+    const ext = file.name.split('.').pop() || 'bin'
     const filename = `chat/${user!.id}/${Date.now()}.${ext}`
     const { error: uploadError } = await supabase.storage.from('chat-media').upload(filename, file, { contentType: file.type })
     if (uploadError) { alert('Erro no upload: ' + uploadError.message); return }
     const { data: { publicUrl } } = supabase.storage.from('chat-media').getPublicUrl(filename)
     const { data: inserted } = await supabase.from('messages')
-      .insert({ sender_id: user!.id, receiver_id: selected.studentUserId, content: '', type: 'photo', file_url: publicUrl })
+      .insert({ sender_id: user!.id, receiver_id: selected.studentUserId, content: isImage ? '' : file.name, type: isImage ? 'photo' : 'file', file_url: publicUrl })
       .select('id, sender_id, content, type, file_url, created_at, read_at').single()
     if (inserted) setMessages(prev => [...prev, inserted])
+    supabase.functions.invoke('send-push-notification', { body: { user_id: selected.studentUserId, title: user?.name || 'Coach', body: isImage ? '📷 Foto' : `📎 ${file.name}`, data: { screen: '/(student)/chat' } } })
   }
 
   const startRecording = async () => {
@@ -210,6 +213,7 @@ export default function Chat() {
   const lastPreview = (msg?: string, type?: string) => {
     if (type === 'audio') return '🎵 Áudio'
     if (type === 'photo') return '📷 Foto'
+    if (type === 'file') return '📎 Arquivo'
     return msg || 'Nenhuma mensagem ainda'
   }
 
@@ -223,8 +227,8 @@ export default function Chat() {
         </div>
       )}
 
-      <input ref={fileInputRef} type="file" accept="image/*" style={{ display:'none' }}
-        onChange={e => { const f = e.target.files?.[0]; if (f) sendPhoto(f); e.target.value = '' }} />
+      <input ref={fileInputRef} type="file" accept="*" style={{ display:'none' }}
+        onChange={e => { const f = e.target.files?.[0]; if (f) sendFile(f); e.target.value = '' }} />
 
       {/* Sidebar */}
       <div style={{ width:280, display:'flex', flexDirection:'column', borderRight:'1px solid var(--border)', flexShrink:0 }}>
@@ -277,6 +281,12 @@ export default function Chat() {
                   <div style={{ maxWidth:'65%', padding:'10px 14px', borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px', backgroundColor: isMe ? '#E8FF00' : 'var(--surface)' }}>
                     {msg.type === 'audio' && msg.file_url ? (
                       <AudioBubble url={msg.file_url} isMe={isMe} />
+                    ) : msg.type === 'file' && msg.file_url ? (
+                      <a href={msg.file_url} target="_blank" rel="noopener noreferrer"
+                        style={{ display:'flex', alignItems:'center', gap:8, textDecoration:'none', color: isMe ? '#0A0A0A' : 'var(--text)' }}>
+                        <Paperclip size={15} style={{ flexShrink:0 }} />
+                        <span style={{ fontSize:13, wordBreak:'break-all' }}>{msg.content || 'Arquivo'}</span>
+                      </a>
                     ) : msg.file_url ? (
                       <img src={msg.file_url} alt="foto" onClick={() => setLightbox(msg.file_url!)}
                         style={{ borderRadius:8, maxWidth:'100%', maxHeight:240, objectFit:'cover', display:'block', cursor:'zoom-in' }} />
@@ -317,8 +327,9 @@ export default function Chat() {
                 <button onClick={() => fileInputRef.current?.click()}
                   style={{ width:36, height:36, borderRadius:8, border:'none', backgroundColor:'transparent', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:'var(--text-2)' }}
                   onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--surface)')}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
-                  <ImageIcon size={18} />
+                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  title="Enviar arquivo (máx. 3MB)">
+                  <Paperclip size={18} />
                 </button>
                 <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={handleKey}
                   placeholder="Digite uma mensagem... (Enter para enviar)" rows={1}
