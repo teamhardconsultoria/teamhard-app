@@ -1,16 +1,22 @@
 import { useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Linking, Image,
 } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuthStore } from '@/store/auth'
+import { supabase } from '@/lib/supabase'
 import { colors, font } from '@/lib/theme'
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const { signIn, signInWithGoogle } = useAuthStore()
+  const { signIn } = useAuthStore()
+  const [resetLoading, setResetLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const insets = useSafeAreaInsets()
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -30,14 +36,16 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
     >
-      <View style={styles.inner}>
+      <View style={[styles.inner, { paddingBottom: Math.max(40, insets.bottom + 16) }]}>
         {/* Logo / Header */}
         <View style={styles.header}>
-          <Text style={styles.logo}>TEAM</Text>
-          <Text style={[styles.logo, styles.logoAccent]}>HARD</Text>
-          <Text style={styles.subtitle}>Consultoria Esportiva</Text>
+          <Image
+            source={require('../../assets/logo.jpeg')}
+            style={styles.logoImg}
+            resizeMode="contain"
+          />
         </View>
 
         {/* Form */}
@@ -58,18 +66,45 @@ export default function LoginScreen() {
 
           <View style={styles.inputWrap}>
             <Text style={styles.label}>Senha</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="••••••••"
-              placeholderTextColor={colors.subtext}
-              secureTextEntry
-            />
+            <View style={styles.passwordWrap}>
+              <TextInput
+                style={styles.passwordInput}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="••••••••"
+                placeholderTextColor={colors.subtext}
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(v => !v)} style={styles.eyeBtn}>
+                <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color={colors.subtext} />
+              </TouchableOpacity>
+            </View>
           </View>
 
-          <TouchableOpacity style={styles.forgotWrap}>
-            <Text style={styles.forgot}>Esqueci minha senha</Text>
+          <TouchableOpacity
+            style={styles.forgotWrap}
+            disabled={resetLoading}
+            onPress={async () => {
+              const trimmed = email.trim().toLowerCase()
+              if (!trimmed) {
+                Alert.alert('Informe o e-mail', 'Preencha o campo de e-mail acima antes de redefinir a senha.')
+                return
+              }
+              setResetLoading(true)
+              const { error } = await supabase.auth.resetPasswordForEmail(trimmed)
+              setResetLoading(false)
+              if (error) {
+                Alert.alert('Erro', error.message)
+              } else {
+                Alert.alert('E-mail enviado', 'Verifique sua caixa de entrada e siga as instruções para criar uma nova senha.')
+              }
+            }}
+          >
+            <Text style={[styles.forgot, resetLoading && { opacity: 0.5 }]}>
+              {resetLoading ? 'Enviando...' : 'Esqueci minha senha'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -83,16 +118,17 @@ export default function LoginScreen() {
             }
           </TouchableOpacity>
 
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>ou</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <TouchableOpacity style={styles.googleBtn} onPress={signInWithGoogle}>
-            <Text style={styles.googleText}>Entrar com Google</Text>
-          </TouchableOpacity>
         </View>
+
+        {/* CTA */}
+        <TouchableOpacity
+          style={styles.cta}
+          onPress={() => Linking.openURL('https://teamhardconsultoria.github.io')}
+        >
+          <Text style={styles.ctaText}>Ainda não é aluno?</Text>
+          <Text style={styles.ctaLink}>Entre já para o Team Hard</Text>
+          <Text style={styles.ctaUrl}>teamhardconsultoria.github.io</Text>
+        </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   )
@@ -107,21 +143,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   header: { alignItems: 'center', marginBottom: 48 },
-  logo: {
-    fontSize: 52,
-    fontWeight: '900',
-    color: colors.text,
-    letterSpacing: 8,
-    lineHeight: 56,
-  },
-  logoAccent: { color: colors.yellow },
-  subtitle: {
-    fontSize: 13,
-    color: colors.subtext,
-    letterSpacing: 4,
-    textTransform: 'uppercase',
-    marginTop: 8,
-  },
+  logoImg: { width: 220, height: 110 },
   form: { gap: 16 },
   inputWrap: { gap: 6 },
   label: { fontSize: 12, color: colors.subtext, letterSpacing: 1, textTransform: 'uppercase' },
@@ -135,6 +157,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
   },
+  passwordWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: colors.text,
+  },
+  eyeBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
   forgotWrap: { alignSelf: 'flex-end' },
   forgot: { fontSize: 13, color: colors.yellow },
   btn: {
@@ -146,16 +187,8 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.6 },
   btnText: { fontSize: 15, fontWeight: '800', color: '#0A0A0A', letterSpacing: 2 },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
-  dividerText: { fontSize: 13, color: colors.subtext },
-  googleBtn: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-    backgroundColor: colors.card,
-  },
-  googleText: { fontSize: 15, color: colors.text, fontWeight: '600' },
+  cta: { alignItems: 'center', marginTop: 40, gap: 4 },
+  ctaText: { fontSize: 13, color: '#555' },
+  ctaLink: { fontSize: 14, fontWeight: '700', color: colors.yellow },
+  ctaUrl: { fontSize: 12, color: '#555' },
 })
