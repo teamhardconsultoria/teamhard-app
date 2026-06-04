@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, Image, ActivityIndicator, Alert,
+  KeyboardAvoidingView, Image, ActivityIndicator, Alert,
 } from 'react-native'
+import { useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import * as ImagePicker from 'expo-image-picker'
-import * as FileSystem from 'expo-file-system'
+import { Audio } from 'expo-av'
+import * as DocumentPicker from 'expo-document-picker'
+import * as FileSystem from 'expo-file-system/legacy'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/auth'
 import { colors } from '@/lib/theme'
@@ -14,6 +16,7 @@ interface Message {
   id: string
   sender_id: string
   content: string
+  type?: string
   file_url?: string
   read_at?: string
   created_at: string
@@ -21,151 +24,177 @@ interface Message {
 
 export default function ChatScreen() {
   const { user } = useAuthStore()
+  const [mode, setMode] = useState<'coach' | 'support'>('coach')
   const [messages, setMessages] = useState<Message[]>([])
   const [coachUserId, setCoachUserId] = useState<string | null>(null)
   const [coachName, setCoachName] = useState('Seu Coach')
+  const [supportUserId, setSupportUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
   const flatListRef = useRef<FlatList>(null)
   const [text, setText] = useState('')
+
+  const [recording, setRecording] = useState<Audio.Recording | null>(null)
+  const [recDuration, setRecDuration] = useState(0)
+  const recTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const partnerId = mode === 'coach' ? coachUserId : supportUserId
+  const partnerName = mode === 'coach' ? coachName : 'Suporte'
 
   useEffect(() => {
     const init = async () => {
       const { data: student, error } = await supabase
-        .from('students')
-        .select('id, coach_id')
-        .eq('user_id', user!.id)
-        .single()
-
-      if (error || !student) {
-        Alert.alert('Erro', error?.message || 'Aluno não encontrado')
-        setLoading(false)
-        return
+        .from('students').select('id, coach_id').eq('user_id', user!.id).single()
+      if (error || !student) { Alert.alert('Erro', error?.message || 'Aluno não encontrado'); setLoading(false); return }
+      const [coachRes, saRes] = await Promise.all([
+        supabase.from('coaches').select('user_id').eq('id', student.coach_id).single(),
+        supabase.from('users').select('id').eq('role', 'super_admin').maybeSingle(),
+      ])
+      if (coachRes.data) {
+        const { data: coachUser } = await supabase.from('users').select('name').eq('id', coachRes.data.user_id).single()
+        setCoachUserId(coachRes.data.user_id)
+        setCoachName(coachUser?.name || 'Coach')
       }
-
-      const { data: coach } = await supabase
-        .from('coaches')
-        .select('user_id')
-        .eq('id', student.coach_id)
-        .single()
-
-      if (!coach) { setLoading(false); return }
-
-      const { data: coachUser } = await supabase
-        .from('users')
-        .select('name')
-        .eq('id', coach.user_id)
-        .single()
-
-      setCoachUserId(coach.user_id)
-      setCoachName(coachUser?.name || 'Coach')
-
-      await fetchMessages(user!.id, coach.user_id)
-      subscribeToMessages(user!.id, coach.user_id)
+      setSupportUserId(saRes.data?.id || null)
       setLoading(false)
     }
     init()
   }, [])
 
-  const fetchMessages = async (myId: string, coachId: string) => {
-    const { data } = await supabase
-      .from('messages')
-      .select('id, sender_id, content, file_url, read_at, created_at')
-      .or(`and(sender_id.eq.${myId},receiver_id.eq.${coachId}),and(sender_id.eq.${coachId},receiver_id.eq.${myId})`)
-      .order('created_at', { ascending: true })
+  useFocusEffect(useCallback(() => {
+    if (user?.id && partnerId) fetchMessages(user.id, partnerId)
+  }, [partnerId]))
 
-    setMessages(data || [])
-
-    await supabase
-      .from('messages')
-      .update({ read_at: new Date().toISOString() })
-      .eq('receiver_id', myId)
-      .eq('sender_id', coachId)
-      .is('read_at', null)
-  }
-
-  const subscribeToMessages = (myId: string, coachId: string) => {
-    supabase
-      .channel(`chat-${myId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-      }, async (payload) => {
+  useEffect(() => {
+    if (!user?.id || !partnerId) return
+    setMessages([])
+    fetchMessages(user.id, partnerId)
+    const channel = supabase
+      .channel(`chat-${user.id}-${partnerId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
         const msg = payload.new as any
         const isMyConv =
-          (msg.sender_id === myId && msg.receiver_id === coachId) ||
-          (msg.sender_id === coachId && msg.receiver_id === myId)
+          (msg.sender_id === user!.id && msg.receiver_id === partnerId) ||
+          (msg.sender_id === partnerId && msg.receiver_id === user!.id)
         if (!isMyConv) return
-        setMessages(prev => [...prev, msg])
-        if (msg.sender_id === coachId) {
+        setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
+        if (msg.sender_id === partnerId)
           await supabase.from('messages').update({ read_at: new Date().toISOString() }).eq('id', msg.id)
-        }
       })
       .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [mode, coachUserId, supportUserId])
+
+  const fetchMessages = async (myId: string, pid: string) => {
+    const { data } = await supabase
+      .from('messages')
+      .select('id, sender_id, content, type, file_url, read_at, created_at')
+      .or(`and(sender_id.eq.${myId},receiver_id.eq.${pid}),and(sender_id.eq.${pid},receiver_id.eq.${myId})`)
+      .order('created_at', { ascending: true })
+    setMessages(data || [])
+    await supabase.from('messages').update({ read_at: new Date().toISOString() })
+      .eq('receiver_id', myId).eq('sender_id', pid).is('read_at', null)
   }
 
   const sendText = async () => {
-    if (!text.trim() || !coachUserId) return
+    if (!text.trim() || !partnerId) return
+    setSending(true)
     const content = text.trim()
     setText('')
-    const { data: inserted, error } = await supabase.from('messages').insert({
-      sender_id: user!.id,
-      receiver_id: coachUserId,
-      content,
-      type: 'text',
-    }).select('id, sender_id, content, file_url, read_at, created_at').single()
-    if (error) { Alert.alert('Erro ao enviar', error.message); return }
+    const { data: inserted, error } = await supabase.from('messages')
+      .insert({ sender_id: user!.id, receiver_id: partnerId, content, type: 'text' })
+      .select('id, sender_id, content, type, file_url, read_at, created_at').single()
+    if (error) { Alert.alert('Erro ao enviar', error.message); setSending(false); return }
     if (inserted) setMessages(prev => [...prev, inserted])
     supabase.functions.invoke('send-push-notification', {
-      body: {
-        user_id: coachUserId,
-        title: user!.name || 'Aluno',
-        body: content.length > 80 ? content.slice(0, 80) + '…' : content,
-        data: { screen: '/(coach)/chat' },
-      },
+      body: { user_id: partnerId, title: user!.name || 'Aluno', body: content.length > 80 ? content.slice(0, 80) + '…' : content, data: { screen: mode === 'coach' ? '/(coach)/chat' : '/(admin)/support' }, channel_id: 'messages' },
     })
+    setSending(false)
   }
 
   const sendPhoto = async () => {
-    if (!coachUserId) return
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-    })
+    if (!partnerId) return
+    const result = await DocumentPicker.getDocumentAsync({ type: 'image/*', copyToCacheDirectory: true })
     if (result.canceled) return
-
-    const uri = result.assets[0].uri
-    const filename = `chat/${user!.id}/${Date.now()}.jpg`
-
-    const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 })
-    const binaryStr = atob(base64)
-    const bytes = new Uint8Array(binaryStr.length)
-    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
-
-    const { error: uploadError } = await supabase.storage.from('chat-media').upload(filename, bytes, { contentType: 'image/jpeg', upsert: true })
-    if (!uploadError) {
+    const asset = result.assets[0]
+    const mimeType = asset.mimeType || 'image/jpeg'
+    const ext = mimeType.split('/')[1] || 'jpg'
+    const filename = `chat/${user!.id}/${Date.now()}.${ext}`
+    try {
+      const cacheUri = `${FileSystem.cacheDirectory}chat_upload_${Date.now()}.${ext}`
+      await FileSystem.copyAsync({ from: asset.uri, to: cacheUri })
+      const base64 = await FileSystem.readAsStringAsync(cacheUri, { encoding: FileSystem.EncodingType.Base64 })
+      const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+      const { error: uploadError } = await supabase.storage.from('chat-media').upload(filename, bytes, { contentType: mimeType })
+      if (uploadError) { Alert.alert('Erro no upload', uploadError.message); return }
       const { data: { publicUrl } } = supabase.storage.from('chat-media').getPublicUrl(filename)
-      await supabase.from('messages').insert({
-        sender_id: user!.id,
-        receiver_id: coachUserId,
-        type: 'photo',
-        file_url: publicUrl,
-      })
-    } else {
-      Alert.alert('Erro', 'Não foi possível enviar a foto.')
-    }
+      const { data: inserted, error } = await supabase.from('messages')
+        .insert({ sender_id: user!.id, receiver_id: partnerId, content: '', type: 'photo', file_url: publicUrl })
+        .select('id, sender_id, content, type, file_url, read_at, created_at').single()
+      if (error) { Alert.alert('Erro ao enviar', error.message); return }
+      if (inserted) setMessages(prev => [...prev, inserted])
+    } catch (e: any) { Alert.alert('Erro', e.message) }
   }
 
+  const startRecording = async () => {
+    const { status } = await Audio.requestPermissionsAsync()
+    if (status !== 'granted') { Alert.alert('Permissão negada', 'Permita o acesso ao microfone nas configurações.'); return }
+    await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true })
+    const { recording: rec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY)
+    setRecording(rec)
+    setRecDuration(0)
+    recTimerRef.current = setInterval(() => setRecDuration(d => d + 1), 1000)
+  }
+
+  const cancelRecording = async () => {
+    if (!recording) return
+    clearInterval(recTimerRef.current!)
+    await recording.stopAndUnloadAsync()
+    await Audio.setAudioModeAsync({ allowsRecordingIOS: false })
+    setRecording(null)
+    setRecDuration(0)
+  }
+
+  const stopAndSendAudio = async () => {
+    if (!recording || !partnerId) return
+    clearInterval(recTimerRef.current!)
+    await recording.stopAndUnloadAsync()
+    await Audio.setAudioModeAsync({ allowsRecordingIOS: false })
+    const uri = recording.getURI()
+    setRecording(null)
+    setRecDuration(0)
+    if (!uri) return
+    const filename = `chat/${user!.id}/${Date.now()}.m4a`
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 })
+      const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+      const { error: uploadError } = await supabase.storage.from('chat-media').upload(filename, bytes, { contentType: 'audio/m4a' })
+      if (uploadError) { Alert.alert('Erro no upload', uploadError.message); return }
+      const { data: { publicUrl } } = supabase.storage.from('chat-media').getPublicUrl(filename)
+      const { data: inserted, error } = await supabase.from('messages')
+        .insert({ sender_id: user!.id, receiver_id: partnerId, content: '', type: 'audio', file_url: publicUrl })
+        .select('id, sender_id, content, type, file_url, read_at, created_at').single()
+      if (error) { Alert.alert('Erro ao enviar', error.message); return }
+      if (inserted) setMessages(prev => [...prev, inserted])
+      supabase.functions.invoke('send-push-notification', {
+        body: { user_id: partnerId, title: user!.name || 'Aluno', body: '🎵 Áudio', data: { screen: mode === 'coach' ? '/(coach)/chat' : '/(admin)/support' }, channel_id: 'messages' },
+      })
+    } catch (e: any) { Alert.alert('Erro', e.message) }
+  }
+
+  const fmtDur = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+
   const renderMessage = ({ item }: { item: Message }) => {
-    const isMe = item.sender_id === user!.id
+    const isMe = item.sender_id === user?.id
     return (
       <View style={[styles.msgWrap, isMe ? styles.msgWrapRight : styles.msgWrapLeft]}>
         <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
-          {item.file_url ? (
-            <Image source={{ uri: item.file_url }} style={styles.msgImage} resizeMode="cover" />
-          ) : (
-            <Text style={[styles.msgText, isMe && styles.msgTextMe]}>{item.content}</Text>
-          )}
+          {item.type === 'audio' && item.file_url
+            ? <AudioBubble uri={item.file_url} isMe={isMe} />
+            : item.file_url
+              ? <Image source={{ uri: item.file_url }} style={styles.msgImage} resizeMode="cover" />
+              : <Text style={[styles.msgText, isMe && styles.msgTextMe]}>{item.content}</Text>
+          }
         </View>
         <Text style={styles.msgTime}>
           {new Date(item.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
@@ -178,16 +207,27 @@ export default function ChatScreen() {
   if (loading) return <View style={styles.center}><ActivityIndicator color={colors.yellow} /></View>
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.container} behavior="padding">
       <View style={styles.header}>
-        <View style={styles.coachAvatar}>
-          <Text style={styles.coachAvatarText}>{coachName.charAt(0)}</Text>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{partnerName.charAt(0)}</Text>
         </View>
         <View>
-          <Text style={styles.coachName}>{coachName}</Text>
-          <Text style={styles.coachSub}>Coach</Text>
+          <Text style={styles.partnerName}>{partnerName}</Text>
+          <Text style={styles.partnerSub}>{mode === 'coach' ? 'Coach' : 'Suporte Método Acelera!'}</Text>
         </View>
       </View>
+
+      {supportUserId && (
+        <View style={styles.tabs}>
+          <TouchableOpacity style={[styles.tab, mode === 'coach' && styles.tabActive]} onPress={() => setMode('coach')}>
+            <Text style={[styles.tabText, mode === 'coach' && styles.tabTextActive]}>Coach</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.tab, mode === 'support' && styles.tabActive]} onPress={() => setMode('support')}>
+            <Text style={[styles.tabText, mode === 'support' && styles.tabTextActive]}>Suporte</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <FlatList
         ref={flatListRef}
@@ -200,27 +240,110 @@ export default function ChatScreen() {
       />
 
       <View style={styles.inputWrap}>
-        <TouchableOpacity style={styles.attachBtn} onPress={sendPhoto}>
-          <Ionicons name="image" size={22} color={colors.subtext} />
-        </TouchableOpacity>
-        <TextInput
-          style={styles.input}
-          value={text}
-          onChangeText={setText}
-          placeholder="Mensagem..."
-          placeholderTextColor={colors.subtext}
-          multiline
-          maxLength={2000}
-        />
-        <TouchableOpacity
-          style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]}
-          onPress={sendText}
-          disabled={!text.trim()}
-        >
-          <Ionicons name="send" size={18} color={text.trim() ? '#0A0A0A' : colors.subtext} />
-        </TouchableOpacity>
+        {recording ? (
+          <>
+            <TouchableOpacity style={styles.attachBtn} onPress={cancelRecording}>
+              <Ionicons name="close-circle" size={24} color="#FF4444" />
+            </TouchableOpacity>
+            <View style={styles.recIndicator}>
+              <View style={styles.recDot} />
+              <Text style={styles.recTime}>{fmtDur(recDuration)}</Text>
+              <Text style={styles.recLabel}>Gravando...</Text>
+            </View>
+            <TouchableOpacity style={[styles.sendBtn, { backgroundColor: '#FF4444' }]} onPress={stopAndSendAudio}>
+              <Ionicons name="send" size={18} color="#fff" />
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity style={styles.attachBtn} onPress={sendPhoto}>
+              <Ionicons name="image" size={22} color={colors.subtext} />
+            </TouchableOpacity>
+            <TextInput
+              style={styles.input}
+              value={text}
+              onChangeText={setText}
+              placeholder="Mensagem..."
+              placeholderTextColor={colors.subtext}
+              multiline
+              maxLength={2000}
+            />
+            {text.trim() ? (
+              <TouchableOpacity
+                style={[styles.sendBtn, (!text.trim() || sending) && styles.sendBtnDisabled]}
+                onPress={sendText}
+                disabled={!text.trim() || sending}
+              >
+                <Ionicons name="send" size={18} color={text.trim() && !sending ? '#0A0A0A' : colors.subtext} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.sendBtn} onPress={startRecording}>
+                <Ionicons name="mic" size={20} color="#0A0A0A" />
+              </TouchableOpacity>
+            )}
+          </>
+        )}
       </View>
     </KeyboardAvoidingView>
+  )
+}
+
+function AudioBubble({ uri, isMe }: { uri: string; isMe: boolean }) {
+  const [sound, setSound] = useState<Audio.Sound | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [duration, setDuration] = useState(0)
+  const [position, setPosition] = useState(0)
+
+  useEffect(() => {
+    let s: Audio.Sound
+    Audio.Sound.createAsync(
+      { uri },
+      { shouldPlay: false },
+      (status) => {
+        if (!status.isLoaded) return
+        setDuration(status.durationMillis ?? 0)
+        setPosition(status.positionMillis ?? 0)
+        setIsPlaying(status.isPlaying)
+        if (status.didJustFinish) { setIsPlaying(false); setPosition(0) }
+      }
+    ).then(({ sound: loaded }) => { s = loaded; setSound(loaded) })
+    return () => { s?.unloadAsync() }
+  }, [uri])
+
+  const toggle = async () => {
+    if (!sound) return
+    if (isPlaying) {
+      await sound.pauseAsync()
+    } else {
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true })
+      if (position >= duration && duration > 0) await sound.setPositionAsync(0)
+      await sound.playAsync()
+    }
+  }
+
+  const fmtMs = (ms: number) => {
+    const s = Math.floor(ms / 1000)
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+  }
+
+  const progress = duration > 0 ? position / duration : 0
+  const accent = isMe ? '#0A0A0A' : colors.yellow
+  const muted  = isMe ? 'rgba(0,0,0,0.35)' : colors.subtext
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 160, maxWidth: 220 }}>
+      <TouchableOpacity onPress={toggle} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Ionicons name={isPlaying ? 'pause-circle' : 'play-circle'} size={38} color={accent} />
+      </TouchableOpacity>
+      <View style={{ flex: 1, gap: 5 }}>
+        <View style={{ height: 3, backgroundColor: muted, borderRadius: 2, overflow: 'hidden' }}>
+          <View style={{ width: `${progress * 100}%`, height: 3, backgroundColor: accent, borderRadius: 2 }} />
+        </View>
+        <Text style={{ fontSize: 11, color: muted }}>
+          {isPlaying || position > 0 ? fmtMs(position) : fmtMs(duration)}
+        </Text>
+      </View>
+    </View>
   )
 }
 
@@ -232,10 +355,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24, paddingTop: 60, paddingBottom: 16,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  coachAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.yellow, alignItems: 'center', justifyContent: 'center' },
-  coachAvatarText: { fontSize: 18, fontWeight: '800', color: '#0A0A0A' },
-  coachName: { fontSize: 16, fontWeight: '700', color: colors.text },
-  coachSub: { fontSize: 12, color: colors.subtext },
+  avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.yellow, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontSize: 18, fontWeight: '800', color: '#0A0A0A' },
+  partnerName: { fontSize: 16, fontWeight: '700', color: colors.text },
+  partnerSub: { fontSize: 12, color: colors.subtext },
+  tabs: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
+  tab: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabActive: { borderBottomColor: colors.yellow },
+  tabText: { fontSize: 14, fontWeight: '600', color: colors.subtext },
+  tabTextActive: { color: colors.yellow },
   list: { padding: 16, gap: 8, paddingBottom: 16 },
   msgWrap: { maxWidth: '78%', gap: 3 },
   msgWrapRight: { alignSelf: 'flex-end', alignItems: 'flex-end' },
@@ -259,4 +387,12 @@ const styles = StyleSheet.create({
   },
   sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.yellow, alignItems: 'center', justifyContent: 'center' },
   sendBtnDisabled: { backgroundColor: colors.border },
+  recIndicator: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: colors.card, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10,
+    borderWidth: 1, borderColor: '#FF444440',
+  },
+  recDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF4444' },
+  recTime: { fontSize: 15, fontWeight: '700', color: '#FF4444' },
+  recLabel: { fontSize: 13, color: colors.subtext },
 })

@@ -1,17 +1,58 @@
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native'
+import { useEffect, useState } from 'react'
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking } from 'react-native'
 import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import * as Notifications from 'expo-notifications'
+import Constants from 'expo-constants'
 import { useAuthStore } from '@/store/auth'
+import { supabase } from '@/lib/supabase'
 import { colors } from '@/lib/theme'
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuthStore()
+  const [notifStatus, setNotifStatus] = useState<'granted' | 'denied' | 'undetermined'>('undetermined')
+
+  useEffect(() => {
+    Notifications.getPermissionsAsync().then(({ status }) => {
+      setNotifStatus(status as any)
+    })
+  }, [])
 
   const handleSignOut = async () => {
     Alert.alert('Sair', 'Deseja encerrar a sessão?', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Sair', style: 'destructive', onPress: signOut },
     ])
+  }
+
+  const handleNotifications = async () => {
+    if (notifStatus === 'granted') {
+      Alert.alert('Notificações ativas', 'Você já está recebendo notificações do Método Acelera!.')
+      return
+    }
+
+    const { status, canAskAgain } = await Notifications.requestPermissionsAsync()
+    setNotifStatus(status as any)
+
+    if (status === 'granted') {
+      try {
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId
+        const tokenData = await Notifications.getExpoPushTokenAsync(
+          projectId && projectId !== 'SEU_EAS_PROJECT_ID' ? { projectId } : undefined
+        )
+        await supabase.from('users').update({ push_token: tokenData.data }).eq('id', user!.id)
+      } catch {}
+      Alert.alert('Notificações ativadas!', 'Você receberá alertas de mensagens e novidades do coach.')
+    } else if (!canAskAgain) {
+      Alert.alert(
+        'Permissão necessária',
+        'Ative as notificações nas configurações do seu celular para receber alertas do Método Acelera!.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Abrir Configurações', onPress: () => Linking.openSettings() },
+        ]
+      )
+    }
   }
 
   return (
@@ -28,7 +69,11 @@ export default function ProfileScreen() {
         <MenuItem icon="person-outline" label="Editar Anamnese" onPress={() => router.push('/onboarding/anamnese')} />
         <MenuItem icon="camera-outline" label="Enviar Avaliação" onPress={() => router.push('/(student)/assessment')} />
         <MenuItem icon="trending-up-outline" label="Minha Evolução" onPress={() => router.push('/(student)/evolution')} />
-        <MenuItem icon="notifications-outline" label="Notificações" onPress={() => {}} />
+        <MenuItem
+          icon={notifStatus === 'granted' ? 'notifications' : 'notifications-outline'}
+          label={notifStatus === 'granted' ? 'Notificações ativas' : 'Ativar Notificações'}
+          onPress={handleNotifications}
+        />
         <MenuItem icon="lock-closed-outline" label="Alterar Senha" onPress={() => router.push('/(auth)/change-password')} />
       </View>
 
