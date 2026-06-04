@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Team Hard",
+    "name": "Método Acelera!",
     "slug": "teamhard-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -21,6 +21,7 @@
       "buildNumber": "1"
     },
     "android": {
+      "newArchEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A0A0A"
@@ -31,6 +32,7 @@
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
         "android.permission.RECORD_AUDIO",
         "android.permission.VIBRATE"
       ]
@@ -52,13 +54,21 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Team Hard precisa da câmera para fotos de avaliação."
+          "cameraPermission": "Método Acelera! precisa da câmera para fotos de avaliação."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Team Hard precisa acessar suas fotos para envio de avaliações."
+          "photosPermission": "Método Acelera! precisa acessar suas fotos para envio de avaliações."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Método Acelera! precisa salvar imagens na sua galeria.",
+          "savePhotosPermission": "Método Acelera! precisa salvar imagens na sua galeria.",
+          "isAccessMediaLocationEnabled": true
         }
       ]
     ],
