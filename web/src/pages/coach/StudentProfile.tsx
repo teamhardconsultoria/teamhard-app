@@ -403,11 +403,11 @@ export default function StudentProfile() {
                   <EditField label="Tipo de plano">
                     <select value={editForm.plan_type} onChange={e => setEditForm(p => ({ ...p, plan_type: e.target.value }))}
                       style={{ width: '100%', padding: '10px 12px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 14, outline: 'none' }}>
-                      <option value="monthly">Mensal</option>
-                      <option value="quarterly">Trimestral</option>
-                      <option value="semiannual">Semestral</option>
-                      <option value="annual">Anual</option>
+                      <option value="monthly">Mensal — R$397/mês</option>
+                      <option value="quarterly">Trimestral — R$247/mês</option>
                       <option value="permuta">Permuta</option>
+                      <option value="semiannual">Semestral (legado)</option>
+                      <option value="annual">Anual (legado)</option>
                     </select>
                   </EditField>
                   <EditField label="Status de pagamento">

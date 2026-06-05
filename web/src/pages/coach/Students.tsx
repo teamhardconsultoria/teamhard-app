@@ -39,7 +39,7 @@ const PLAN_LABEL: Record<string, string> = {
   monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual', permuta: 'Permuta',
 }
 const PLAN_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12, permuta: 12 }
-const PLAN_DEFAULTS: Record<string, number> = { monthly: 299, quarterly: 807, semiannual: 1434 }
+const PLAN_DEFAULTS: Record<string, number> = { monthly: 397, quarterly: 741 }
 
 function calcPlanEnd(start: string, planType: string): string {
   const d = new Date(start + 'T12:00:00')
@@ -48,7 +48,7 @@ function calcPlanEnd(start: string, planType: string): string {
 }
 
 function getInstallmentCount(paymentMethod: string, planType: string, creditInstallments: number): number {
-  if (paymentMethod === 'subscription') return PLAN_MONTHS[planType] || 1
+  if (paymentMethod === 'subscription' || paymentMethod === 'pix_auto') return PLAN_MONTHS[planType] || 1
   if (paymentMethod === 'credit') return creditInstallments
   return 1
 }
@@ -56,7 +56,7 @@ function getInstallmentCount(paymentMethod: string, planType: string, creditInst
 const emptyForm = {
   name: '', email: '', phone: '',
   plan_type: 'monthly', plan_start: new Date().toISOString().split('T')[0],
-  payment_method: 'subscription', amount: '299.00', installment_count: 1, discount: '0',
+  payment_method: 'pix', amount: '397.00', installment_count: 1, discount: '0',
   cpf: '', address: '', cep: '',
 }
 
@@ -449,14 +449,13 @@ export default function Students() {
                         const pt = e.target.value
                         const maxInst = PLAN_MONTHS[pt] || 1
                         const defaultAmt = pt === 'permuta' ? '' : (PLAN_DEFAULTS[pt] != null ? PLAN_DEFAULTS[pt].toFixed(2) : '')
-                        setForm(p => ({ ...p, plan_type: pt, installment_count: Math.min(p.installment_count, maxInst), amount: defaultAmt, discount: '0' }))
+                        const defaultMethod = pt === 'quarterly' ? 'subscription' : 'pix'
+                        setForm(p => ({ ...p, plan_type: pt, installment_count: Math.min(p.installment_count, maxInst), amount: defaultAmt, discount: '0', payment_method: pt === 'permuta' ? p.payment_method : defaultMethod }))
                       }}
                       style={{ width: '100%', padding: '12px 14px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text)', fontSize: 14, outline: 'none' }}
                     >
-                      <option value="monthly">Mensal</option>
-                      <option value="quarterly">Trimestral</option>
-                      <option value="semiannual">Semestral</option>
-
+                      <option value="monthly">Mensal — R$397/mês</option>
+                      <option value="quarterly">Trimestral — R$247/mês</option>
                       <option value="permuta">Permuta</option>
                     </select>
                   </ModalField>
@@ -480,11 +479,20 @@ export default function Students() {
                         onFocus={e => (e.currentTarget.style.borderColor = '#E8FF00')}
                         onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
                       >
-                        <option value="subscription">Assinatura / Recorrente</option>
-                        <option value="cash">Dinheiro / À vista</option>
-                        <option value="pix">PIX</option>
-                        <option value="debit">Cartão de débito</option>
-                        <option value="credit">Cartão de crédito</option>
+                        {form.plan_type === 'quarterly' ? (
+                          <>
+                            <option value="subscription">Crédito recorrente</option>
+                            <option value="credit">Crédito 3x</option>
+                            <option value="pix_auto">PIX automático</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="boleto">Boleto bancário</option>
+                            <option value="debit">Cartão de débito</option>
+                            <option value="credit">Crédito à vista</option>
+                            <option value="pix">PIX</option>
+                          </>
+                        )}
                       </select>
                     </ModalField>
                     <div style={{ display: 'flex', gap: 12 }}>
@@ -508,7 +516,7 @@ export default function Students() {
                       </ModalField>
                     </div>
                     <div style={{ display: 'flex', gap: 12 }}>
-                      {form.payment_method === 'credit' && (PLAN_MONTHS[form.plan_type] || 1) > 1 && (
+                      {form.payment_method === 'credit' && form.plan_type === 'quarterly' && (
                         <ModalField label="Parcelas">
                           <select
                             value={form.installment_count}
@@ -517,7 +525,7 @@ export default function Students() {
                             onFocus={e => (e.currentTarget.style.borderColor = '#E8FF00')}
                             onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
                           >
-                            {Array.from({ length: PLAN_MONTHS[form.plan_type] || 1 }, (_, i) => i + 1).map(n => {
+                            {Array.from({ length: 3 }, (_, i) => i + 1).map(n => {
                               const amt = parseFloat(form.amount) || 0
                               return (
                                 <option key={n} value={n}>

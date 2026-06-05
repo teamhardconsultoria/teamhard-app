@@ -37,7 +37,7 @@ const SOURCE_MAP = Object.fromEntries(SOURCES.map(s => [s.key, s]))
 const STATUS_MAP  = Object.fromEntries(STATUSES.map(s => [s.key, s]))
 
 const PLAN_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12, permuta: 12 }
-const PLAN_LABEL:  Record<string, string>  = { monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', permuta: 'Permuta' }
+const PLAN_LABEL:  Record<string, string>  = { monthly: 'Mensal — R$397/mês', quarterly: 'Trimestral — R$247/mês', permuta: 'Permuta' }
 
 function calcPlanEnd(start: string, planType: string) {
   const d = new Date(start + 'T12:00:00')
@@ -57,8 +57,8 @@ function fmtDate(date: string | null) {
 }
 
 const emptyForm = { name: '', phone: '', email: '', instagram: '', source: '', notes: '', next_contact_at: '', status: 'new' }
-const PLAN_DEFAULTS: Record<string, number> = { monthly: 299, quarterly: 807, semiannual: 1434 }
-const emptyConvert = { plan_type: 'monthly', plan_start: new Date().toISOString().split('T')[0], amount: '299.00', payment_method: 'subscription', installment_count: 1, discount: '0', cpf: '', address: '', cep: '' }
+const PLAN_DEFAULTS: Record<string, number> = { monthly: 397, quarterly: 741 }
+const emptyConvert = { plan_type: 'monthly', plan_start: new Date().toISOString().split('T')[0], amount: '397.00', payment_method: 'pix', installment_count: 1, discount: '0', cpf: '', address: '', cep: '' }
 
 export default function Leads() {
   const { user } = useAuthStore()
@@ -487,7 +487,8 @@ export default function Leads() {
                     const pt = e.target.value
                     const base = PLAN_DEFAULTS[pt]
                     const amt = base != null ? base.toFixed(2) : ''
-                    setConvertForm(f => ({ ...f, plan_type: pt, amount: amt, discount: '0', installment_count: 1 }))
+                    const defaultMethod = pt === 'quarterly' ? 'subscription' : 'pix'
+                    setConvertForm(f => ({ ...f, plan_type: pt, amount: amt, discount: '0', installment_count: 1, payment_method: pt === 'permuta' ? f.payment_method : defaultMethod }))
                   }} style={inputStyle}>
                     {Object.entries(PLAN_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
@@ -518,17 +519,28 @@ export default function Leads() {
               </div>
 
               <Field label="Forma de pagamento">
-                <select value={convertForm.payment_method} onChange={e => setConvertForm(f => ({ ...f, payment_method: e.target.value }))} style={inputStyle}>
-                  <option value="subscription">Assinatura mensal</option>
-                  <option value="pix">PIX / boleto (à vista)</option>
-                  <option value="credit">Cartão parcelado</option>
+                <select value={convertForm.payment_method} onChange={e => setConvertForm(f => ({ ...f, payment_method: e.target.value, installment_count: 1 }))} style={inputStyle}>
+                  {convertForm.plan_type === 'quarterly' ? (
+                    <>
+                      <option value="subscription">Crédito recorrente</option>
+                      <option value="credit">Crédito 3x</option>
+                      <option value="pix_auto">PIX automático</option>
+                    </>
+                  ) : convertForm.plan_type === 'permuta' ? null : (
+                    <>
+                      <option value="boleto">Boleto bancário</option>
+                      <option value="debit">Cartão de débito</option>
+                      <option value="credit">Crédito à vista</option>
+                      <option value="pix">PIX</option>
+                    </>
+                  )}
                 </select>
               </Field>
 
-              {convertForm.payment_method === 'credit' && (
+              {convertForm.payment_method === 'credit' && convertForm.plan_type === 'quarterly' && (
                 <Field label="Parcelas">
                   <select value={convertForm.installment_count} onChange={e => setConvertForm(f => ({ ...f, installment_count: Number(e.target.value) }))} style={inputStyle}>
-                    {Array.from({ length: PLAN_MONTHS[convertForm.plan_type] || 1 }, (_, i) => i + 1).map(n => (
+                    {Array.from({ length: 3 }, (_, i) => i + 1).map(n => (
                       <option key={n} value={n}>{n}x de R$ {(parseFloat(convertForm.amount || '0') / n).toFixed(2)}</option>
                     ))}
                   </select>
