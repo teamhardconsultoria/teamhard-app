@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, X, Check, History, Zap, Copy, ExternalLink, ChevronLeft, Trash2, RefreshCw, Link, ShieldCheck, Calendar } from 'lucide-react'
-import { sendAutoMessage } from '../../lib/autoMessage'
+import { Plus, X, Check, History, Copy, ExternalLink, ChevronLeft, Trash2, Link, ShieldCheck, Calendar } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -21,9 +20,9 @@ const PLAN_LABEL: Record<string, string> = { monthly:'Mensal', quarterly:'Trimes
 const PLAN_MONTHS: Record<string, number> = { monthly:1, quarterly:3, semiannual:6, annual:12, permuta:0 }
 const METHODS = ['PIX','PIX automático','Boleto','Cartão de débito','Crédito à vista','Crédito recorrente','Crédito 3x','Dinheiro','Transferência']
 const emptyForm = { amount:'', payment_method:'PIX', due_date: new Date().toISOString().split('T')[0], paid_at: new Date().toISOString().split('T')[0] }
-const emptySub = { amount:'', billing_type:'CREDIT_CARD', due_date: new Date().toISOString().split('T')[0], cpf:'' }
 const MAX_INSTALLMENTS: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 }
 const PLAN_DEFAULTS: Record<string, number> = { monthly: 397, quarterly: 741 }
+const EDUZZ_LINKS: Record<string, string> = { monthly: 'https://chk.eduzz.com/40QROXQ39B', quarterly: 'https://chk.eduzz.com/60E2D8AKW3' }
 type Filter = 'all'|'active'|'pending'|'overdue'|'blocked'
 const spin = { width:20, height:20, border:'2px solid #E8FF00', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }
 const inputStyle = { width:'100%', padding:'11px 14px', backgroundColor:'var(--bg)', border:'1px solid var(--border)', borderRadius:10, color:'var(--text)', fontSize:13, outline:'none', boxSizing:'border-box' as const }
@@ -61,22 +60,10 @@ export default function Payments() {
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [showAsaas, setShowAsaas] = useState(false)
-  const [asaasStudent, setAsaasStudent] = useState<StudentPayment | null>(null)
-  const [asaasForm, setAsaasForm] = useState({ amount:'', billing_type:'PIX', due_date: new Date().toISOString().split('T')[0], cpf:'', installment_count: 1 })
-  const [asaasResult, setAsaasResult] = useState<{ pixEncodedImage?:string; pixPayload?:string; bankSlipUrl?:string; invoiceUrl?:string } | null>(null)
-  const [asaasSaving, setAsaasSaving] = useState(false)
-  const [asaasError, setAsaasError] = useState('')
-  const [asaasOpenChargesCount, setAsaasOpenChargesCount] = useState(0)
-  const [copied, setCopied] = useState(false)
+  const [showEduzz, setShowEduzz] = useState(false)
+  const [eduzzStudent, setEduzzStudent] = useState<StudentPayment | null>(null)
+  const [eduzzLinkCopied, setEduzzLinkCopied] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [showSub, setShowSub] = useState(false)
-  const [subStudent, setSubStudent] = useState<StudentPayment | null>(null)
-  const [subForm, setSubForm] = useState(emptySub)
-  const [subSaving, setSubSaving] = useState(false)
-  const [subError, setSubError] = useState('')
-  const [subResult, setSubResult] = useState<{ paymentLink?:string } | null>(null)
-  const [linkCopied, setLinkCopied] = useState(false)
   const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [scheduleStudent, setScheduleStudent] = useState<StudentPayment | null>(null)
   const [scheduleForm, setScheduleForm] = useState({ amount_per_inst: '' })
@@ -192,19 +179,10 @@ export default function Payments() {
     setMarkingPaidId(null)
   }
 
-  const handleAsaas = async () => {
-    if (!asaasForm.amount || !asaasStudent) { setAsaasError('Preencha o valor.'); return }
-    setAsaasSaving(true); setAsaasError('')
-    try {
-      const chargeBody: Record<string, unknown> = { student_id:asaasStudent.id, amount:parseFloat(asaasForm.amount), due_date:asaasForm.due_date, billing_type:asaasForm.billing_type, cpf:asaasForm.cpf || undefined }
-      if (asaasForm.billing_type === 'CREDIT_CARD' && asaasForm.installment_count > 1) chargeBody.installment_count = asaasForm.installment_count
-      const { data, error: fnError } = await supabase.functions.invoke('asaas-create-charge', { body: chargeBody })
-      if (fnError || data?.error) { setAsaasError(data?.error || fnError?.message || 'Erro ao criar cobrança.'); return }
-      setAsaasResult(data)
-      if (coachId) await loadStudents(coachId)
-      if (historyStudent?.id === asaasStudent.id) await openHistory(asaasStudent)
-      if (coachId) sendAutoMessage({ coachUserId: user!.id, coachId, studentId: asaasStudent.id, type: 'payment_pending', studentName: asaasStudent.name })
-    } catch (err: any) { setAsaasError(err.message || 'Erro inesperado.') } finally { setAsaasSaving(false) }
+  const openEduzzModal = (student: StudentPayment) => {
+    setEduzzStudent(student)
+    setEduzzLinkCopied(false)
+    setShowEduzz(true)
   }
 
   const handleUnblock = async (student: StudentPayment) => {
@@ -220,32 +198,6 @@ export default function Payments() {
     setHistory(prev => prev.filter(p => p.id !== paymentId))
     if (activeTab === 'agenda') await loadAgenda()
     setDeletingId(null)
-  }
-
-  const openAsaasModal = (student: StudentPayment) => {
-    setAsaasStudent(student)
-    setAsaasForm({ amount:'', billing_type:'PIX', due_date: new Date().toISOString().split('T')[0], cpf:'', installment_count: 1 })
-    setAsaasResult(null)
-    setAsaasError('')
-    setAsaasOpenChargesCount(0)
-    setShowAsaas(true)
-    supabase.from('payments').select('id', { count: 'exact', head: true })
-      .eq('student_id', student.id)
-      .not('asaas_charge_id', 'is', null)
-      .in('status', ['pending', 'overdue'])
-      .then(({ count }) => setAsaasOpenChargesCount(count || 0))
-  }
-
-  const handleSub = async () => {
-    if (!subForm.amount || !subStudent) { setSubError('Preencha o valor.'); return }
-    setSubSaving(true); setSubError('')
-    try {
-      const { data, error: fnErr } = await supabase.functions.invoke('asaas-create-subscription', {
-        body: { student_id: subStudent.id, amount: parseFloat(subForm.amount), due_date: subForm.due_date, billing_type: subForm.billing_type, cpf: subForm.cpf || undefined },
-      })
-      if (fnErr || data?.error) { setSubError(data?.error || fnErr?.message || 'Erro ao criar assinatura.'); return }
-      setSubResult(data)
-    } catch (e:any) { setSubError(e.message || 'Erro inesperado.') } finally { setSubSaving(false) }
   }
 
   const filtered = filter === 'all' ? students : students.filter(s => s.payment_status === filter)
@@ -301,9 +253,8 @@ export default function Payments() {
                 {filtered.map(student => (
                   <StudentCard key={student.id} student={student}
                     onHistory={() => openHistory(student)}
-                    onAsaas={() => openAsaasModal(student)}
+                    onEduzz={() => openEduzzModal(student)}
                     onManual={() => { setModalStudent(student); setForm(emptyForm); setError(''); setShowModal(true) }}
-                    onSub={() => { setSubStudent(student); setSubForm(emptySub); setSubResult(null); setSubError(''); setShowSub(true) }}
                     onUnblock={() => handleUnblock(student)}
                     isHistoryActive={historyStudent?.id === student.id}
                   />
@@ -546,192 +497,40 @@ export default function Payments() {
         )
       })()}
 
-      {/* Modal Assinatura Recorrente */}
-      {showSub && subStudent && (
+      {/* Modal Link Eduzz */}
+      {showEduzz && eduzzStudent && (
         <div style={{ position:'fixed', inset:0, backgroundColor:'var(--overlay)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:50, padding:16 }}>
-          <div style={{ backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:20, width:'100%', maxWidth:440 }}>
+          <div style={{ backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:20, width:'100%', maxWidth:400 }}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 20px', borderBottom:'1px solid var(--border)' }}>
               <div>
-                <h2 style={{ fontSize:16, fontWeight:900, color:'var(--text)', margin:0 }}>Assinatura Recorrente</h2>
-                <p style={{ fontSize:12, color:'var(--text-2)', margin:'2px 0 0 0' }}>{subStudent.name} · {PLAN_LABEL[subStudent.plan_type]}</p>
+                <h2 style={{ fontSize:16, fontWeight:900, color:'var(--text)', margin:0 }}>Link de Pagamento</h2>
+                <p style={{ fontSize:12, color:'var(--text-2)', margin:'2px 0 0 0' }}>{eduzzStudent.name} · {PLAN_LABEL[eduzzStudent.plan_type]}</p>
               </div>
-              <button onClick={() => setShowSub(false)} style={{ background:'none', border:'none', color:'var(--text-2)', cursor:'pointer', padding:4 }}><X size={18} /></button>
+              <button onClick={() => setShowEduzz(false)} style={{ background:'none', border:'none', color:'var(--text-2)', cursor:'pointer', padding:4 }}><X size={18} /></button>
             </div>
-            {subResult ? (
-              <div style={{ padding:20, display:'flex', flexDirection:'column', gap:14 }}>
-                <div style={{ backgroundColor:'rgba(0,200,83,0.08)', border:'1px solid rgba(0,200,83,0.2)', borderRadius:12, padding:14, display:'flex', gap:10, alignItems:'flex-start' }}>
-                  <Check size={18} color="#00C853" style={{ flexShrink:0, marginTop:1 }} />
-                  <div>
-                    <p style={{ fontSize:14, fontWeight:700, color:'#00C853', margin:'0 0 4px 0' }}>Assinatura criada com sucesso!</p>
-                    <p style={{ fontSize:12, color:'var(--text-2)', margin:0 }}>O aluno será cobrado automaticamente em cada ciclo.</p>
+            <div style={{ padding:20, display:'flex', flexDirection:'column', gap:14 }}>
+              {EDUZZ_LINKS[eduzzStudent.plan_type] ? (
+                <>
+                  <div style={{ backgroundColor:'rgba(232,255,0,0.05)', border:'1px solid rgba(232,255,0,0.15)', borderRadius:10, padding:'10px 12px' }}>
+                    <p style={{ fontSize:12, color:'var(--text-2)', margin:0 }}>Envie este link ao aluno para ele efetuar o pagamento pelo Eduzz.</p>
                   </div>
-                </div>
-                {subResult.paymentLink && (
-                  <>
-                    <div>
-                      <p style={{ fontSize:11, color:'var(--text-2)', textTransform:'uppercase', letterSpacing:1, margin:'0 0 8px 0' }}>Link de pagamento (cartão)</p>
-                      <div style={{ display:'flex', gap:8 }}>
-                        <input readOnly value={subResult.paymentLink} style={{ ...inputStyle, flex:1, fontSize:11 }} />
-                        <button onClick={() => { navigator.clipboard.writeText(subResult!.paymentLink!); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2000) }}
-                          style={{ padding:'0 14px', backgroundColor:'#E8FF00', border:'none', borderRadius:10, cursor:'pointer', fontWeight:700, fontSize:12, color:'#0A0A0A', flexShrink:0 }}>
-                          {linkCopied ? <Check size={14} /> : <Copy size={14} />}
-                        </button>
-                      </div>
-                      <p style={{ fontSize:11, color:'var(--text-2)', margin:'6px 0 0 0' }}>Envie este link ao aluno para ele cadastrar o cartão.</p>
-                    </div>
-                    <a href={subResult.paymentLink} target="_blank" rel="noopener noreferrer"
-                      style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'11px 16px', border:'1px solid var(--border)', borderRadius:12, fontSize:13, color:'var(--text)', textDecoration:'none' }}>
-                      <Link size={14} /> Abrir link
-                    </a>
-                  </>
-                )}
-                <MBtn onClick={() => setShowSub(false)}>Fechar</MBtn>
-              </div>
-            ) : (
-              <div style={{ padding:20, display:'flex', flexDirection:'column', gap:14 }}>
-                <div style={{ display:'flex', gap:10 }}>
-                  <MField label="Valor (R$) *">
-                    <input type="number" step="0.01" min="0" value={subForm.amount} onChange={e => setSubForm(p => ({ ...p, amount:e.target.value }))} placeholder="0,00" style={inputStyle}
-                      onFocus={e => (e.currentTarget.style.borderColor='#E8FF00')} onBlur={e => (e.currentTarget.style.borderColor='var(--border)')} />
-                  </MField>
-                  <MField label="Primeiro vencimento">
-                    <input type="date" value={subForm.due_date} onChange={e => setSubForm(p => ({ ...p, due_date:e.target.value }))} style={inputStyle} />
-                  </MField>
-                </div>
-                <MField label="CPF do aluno (se não cadastrado)">
-                  <input type="text" value={subForm.cpf} onChange={e => setSubForm(p => ({ ...p, cpf:e.target.value }))} placeholder="000.000.000-00" style={inputStyle}
-                    onFocus={e => (e.currentTarget.style.borderColor='#E8FF00')} onBlur={e => (e.currentTarget.style.borderColor='var(--border)')} />
-                </MField>
-                <div style={{ backgroundColor:'rgba(232,255,0,0.05)', border:'1px solid rgba(232,255,0,0.15)', borderRadius:10, padding:'10px 12px' }}>
-                  <p style={{ fontSize:12, color:'var(--text-2)', margin:0 }}>Cobrança <strong style={{ color:'var(--text)' }}>mensal automática</strong> pelo Asaas. O número de cobranças é definido pelo plano do aluno: Mensal (contínuo), Trimestral (3x), Semestral (6x), Anual (12x).</p>
-                </div>
-                {subError && <p style={{ color:'#FF4444', fontSize:12, margin:0 }}>{subError}</p>}
-                <div style={{ display:'flex', gap:10 }}>
-                  <MBtn onClick={() => setShowSub(false)}>Cancelar</MBtn>
-                  <MBtn primary onClick={handleSub} disabled={subSaving} style={{ flex:2 }}>
-                    {subSaving ? <div style={{ width:16, height:16, border:'2px solid #0A0A0A', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} /> : <><RefreshCw size={14} /> Criar Assinatura</>}
-                  </MBtn>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Modal Asaas */}
-      {showAsaas && asaasStudent && (
-        <div style={{ position:'fixed', inset:0, backgroundColor:'var(--overlay)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:50, padding:16 }}>
-          <div style={{ backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:20, width:'100%', maxWidth:420 }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 20px', borderBottom:'1px solid var(--border)' }}>
-              <div>
-                <h2 style={{ fontSize:16, fontWeight:900, color:'var(--text)', margin:0 }}>Cobrar via Asaas</h2>
-                <p style={{ fontSize:12, color:'var(--text-2)', margin:'2px 0 0 0' }}>{asaasStudent.name} · {PLAN_LABEL[asaasStudent.plan_type]}</p>
-              </div>
-              <button onClick={() => setShowAsaas(false)} style={{ background:'none', border:'none', color:'var(--text-2)', cursor:'pointer', padding:4 }}><X size={18} /></button>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <input readOnly value={EDUZZ_LINKS[eduzzStudent.plan_type]} style={{ ...inputStyle, flex:1, fontSize:12 }} />
+                    <button onClick={() => { navigator.clipboard.writeText(EDUZZ_LINKS[eduzzStudent.plan_type]); setEduzzLinkCopied(true); setTimeout(() => setEduzzLinkCopied(false), 2000) }}
+                      style={{ padding:'0 14px', backgroundColor:'#E8FF00', border:'none', borderRadius:10, cursor:'pointer', fontWeight:700, fontSize:12, color:'#0A0A0A', flexShrink:0 }}>
+                      {eduzzLinkCopied ? <Check size={14} /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                  <a href={EDUZZ_LINKS[eduzzStudent.plan_type]} target="_blank" rel="noopener noreferrer"
+                    style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'11px 16px', border:'1px solid var(--border)', borderRadius:12, fontSize:13, color:'var(--text)', textDecoration:'none' }}>
+                    <ExternalLink size={14} /> Abrir checkout
+                  </a>
+                </>
+              ) : (
+                <p style={{ fontSize:13, color:'var(--text-2)', textAlign:'center', margin:0 }}>Plano {PLAN_LABEL[eduzzStudent.plan_type]} não tem link Eduzz configurado.</p>
+              )}
+              <MBtn onClick={() => setShowEduzz(false)}>Fechar</MBtn>
             </div>
-            {asaasResult ? (
-              <div style={{ padding:20, display:'flex', flexDirection:'column', gap:14 }}>
-                {asaasResult.pixEncodedImage && (
-                  <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12 }}>
-                    <p style={{ fontSize:14, fontWeight:600, color:'var(--text)', margin:0 }}>QR Code PIX</p>
-                    <img src={`data:image/png;base64,${asaasResult.pixEncodedImage}`} alt="QR Code PIX" style={{ width:192, height:192, borderRadius:12, border:'1px solid var(--border)' }} />
-                    {asaasResult.pixPayload && (
-                      <button onClick={() => { navigator.clipboard.writeText(asaasResult!.pixPayload!); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
-                        style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, width:'100%', padding:'12px 16px', backgroundColor:'#E8FF00', color:'#0A0A0A', border:'none', borderRadius:12, fontSize:13, fontWeight:700, cursor:'pointer' }}>
-                        {copied ? <><Check size={15} /> Copiado!</> : <><Copy size={15} /> Copiar código PIX</>}
-                      </button>
-                    )}
-                  </div>
-                )}
-                {asaasResult.bankSlipUrl && (
-                  <a href={asaasResult.bankSlipUrl} target="_blank" rel="noopener noreferrer"
-                    style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, width:'100%', padding:'12px 16px', backgroundColor:'#E8FF00', color:'#0A0A0A', borderRadius:12, fontSize:13, fontWeight:700, textDecoration:'none' }}>
-                    <ExternalLink size={15} /> Abrir Boleto
-                  </a>
-                )}
-                {(asaasForm.billing_type === 'CREDIT_CARD' || asaasForm.billing_type === 'DEBIT_CARD') && asaasResult.invoiceUrl && (
-                  <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                    <div style={{ backgroundColor:'rgba(0,200,83,0.08)', border:'1px solid rgba(0,200,83,0.2)', borderRadius:10, padding:'10px 14px' }}>
-                      <p style={{ fontSize:13, fontWeight:700, color:'#00C853', margin:'0 0 2px 0' }}>Cobrança gerada!</p>
-                      <p style={{ fontSize:12, color:'var(--text-2)', margin:0 }}>
-                        Compartilhe o link abaixo para o aluno pagar com {asaasForm.billing_type === 'CREDIT_CARD' ? `cartão de crédito${asaasForm.installment_count > 1 ? ` em ${asaasForm.installment_count}x` : ' à vista'}` : 'cartão de débito'}.
-                      </p>
-                    </div>
-                    <div style={{ display:'flex', gap:8 }}>
-                      <input readOnly value={asaasResult.invoiceUrl} style={{ ...inputStyle, flex:1, fontSize:11 }} />
-                      <button onClick={() => { navigator.clipboard.writeText(asaasResult!.invoiceUrl!); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
-                        style={{ padding:'0 14px', backgroundColor:'#E8FF00', border:'none', borderRadius:10, cursor:'pointer', fontWeight:700, fontSize:12, color:'#0A0A0A', flexShrink:0 }}>
-                        {copied ? <Check size={14} /> : <Copy size={14} />}
-                      </button>
-                    </div>
-                    <a href={asaasResult.invoiceUrl} target="_blank" rel="noopener noreferrer"
-                      style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'11px 16px', border:'1px solid var(--border)', color:'var(--text-2)', borderRadius:12, fontSize:13, textDecoration:'none' }}>
-                      <ExternalLink size={14} /> Abrir link de pagamento
-                    </a>
-                  </div>
-                )}
-                {(asaasForm.billing_type === 'PIX' || asaasForm.billing_type === 'BOLETO') && asaasResult.invoiceUrl && (
-                  <a href={asaasResult.invoiceUrl} target="_blank" rel="noopener noreferrer"
-                    style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, width:'100%', padding:'11px 16px', border:'1px solid var(--border)', color:'var(--text-2)', borderRadius:12, fontSize:13, textDecoration:'none' }}>
-                    <ExternalLink size={14} /> Ver fatura
-                  </a>
-                )}
-                <MBtn onClick={() => setShowAsaas(false)}>Fechar</MBtn>
-              </div>
-            ) : (
-              <div style={{ padding:20, display:'flex', flexDirection:'column', gap:14 }}>
-                <MField label="Forma de cobrança">
-                  <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                    {[['PIX','PIX'],['BOLETO','Boleto'],['CREDIT_CARD','Crédito'],['DEBIT_CARD','Débito']].map(([val, lbl]) => (
-                      <button key={val} onClick={() => setAsaasForm(p => ({ ...p, billing_type:val, installment_count:1 }))}
-                        style={{ flex:1, padding:'10px 0', borderRadius:10, fontSize:13, fontWeight:700, border: asaasForm.billing_type===val ? 'none' : '1px solid var(--border)', backgroundColor: asaasForm.billing_type===val ? '#E8FF00' : 'transparent', color: asaasForm.billing_type===val ? '#0A0A0A' : 'var(--text-2)', cursor:'pointer', minWidth:70 }}>
-                        {lbl}
-                      </button>
-                    ))}
-                  </div>
-                </MField>
-                {asaasForm.billing_type === 'CREDIT_CARD' && (MAX_INSTALLMENTS[asaasStudent?.plan_type] ?? 1) > 1 && (
-                  <MField label="Parcelas">
-                    <select value={asaasForm.installment_count} onChange={e => setAsaasForm(p => ({ ...p, installment_count: parseInt(e.target.value) }))} style={inputStyle}>
-                      {Array.from({ length: MAX_INSTALLMENTS[asaasStudent!.plan_type] }, (_, i) => i + 1).map(n => {
-                        const amt = parseFloat(asaasForm.amount) || 0
-                        return (
-                          <option key={n} value={n}>
-                            {n === 1 ? 'À vista' : `${n}x${amt > 0 ? ` de R$${(amt / n).toFixed(2).replace('.', ',')}` : ''}`}
-                          </option>
-                        )
-                      })}
-                    </select>
-                  </MField>
-                )}
-                <MField label="Valor (R$) *">
-                  <input type="number" step="0.01" min="0" value={asaasForm.amount} onChange={e => setAsaasForm(p => ({ ...p, amount:e.target.value }))} placeholder="0,00" style={inputStyle}
-                    onFocus={e => (e.currentTarget.style.borderColor='#E8FF00')} onBlur={e => (e.currentTarget.style.borderColor='var(--border)')} />
-                </MField>
-                <MField label="Vencimento">
-                  <input type="date" value={asaasForm.due_date} onChange={e => setAsaasForm(p => ({ ...p, due_date:e.target.value }))} style={inputStyle} />
-                </MField>
-                <MField label="CPF do aluno (se não cadastrado)">
-                  <input type="text" value={asaasForm.cpf} onChange={e => setAsaasForm(p => ({ ...p, cpf:e.target.value }))} placeholder="000.000.000-00" style={inputStyle}
-                    onFocus={e => (e.currentTarget.style.borderColor='#E8FF00')} onBlur={e => (e.currentTarget.style.borderColor='var(--border)')} />
-                </MField>
-                {asaasOpenChargesCount > 0 && (
-                  <div style={{ backgroundColor:'rgba(255,152,0,0.08)', border:'1px solid rgba(255,152,0,0.35)', borderRadius:10, padding:'10px 14px', display:'flex', gap:10, alignItems:'flex-start' }}>
-                    <span style={{ fontSize:16, lineHeight:'1.4', flexShrink:0 }}>⚠️</span>
-                    <p style={{ fontSize:12, color:'var(--text)', margin:0, lineHeight:'1.5' }}>
-                      <strong style={{ color:'#FF9800' }}>Atenção:</strong> este aluno já tem <strong>{asaasOpenChargesCount}</strong> cobrança{asaasOpenChargesCount !== 1 ? 's' : ''} em aberto no Asaas. Criar outra pode gerar notificações duplicadas ao aluno.
-                    </p>
-                  </div>
-                )}
-                {asaasError && <p style={{ color:'#FF4444', fontSize:12, margin:0 }}>{asaasError}</p>}
-                <div style={{ display:'flex', gap:10 }}>
-                  <MBtn onClick={() => setShowAsaas(false)}>Cancelar</MBtn>
-                  <MBtn primary onClick={handleAsaas} disabled={asaasSaving} style={{ flex:2 }}>
-                    {asaasSaving ? <div style={{ width:16, height:16, border:'2px solid #0A0A0A', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} /> : <><Zap size={14} /> Gerar Cobrança</>}
-                  </MBtn>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -739,7 +538,7 @@ export default function Payments() {
   )
 }
 
-function StudentCard({ student, onHistory, onAsaas, onManual, onSub, onUnblock, isHistoryActive }: { student:StudentPayment; onHistory:()=>void; onAsaas:()=>void; onManual:()=>void; onSub:()=>void; onUnblock:()=>void; isHistoryActive:boolean }) {
+function StudentCard({ student, onHistory, onEduzz, onManual, onUnblock, isHistoryActive }: { student:StudentPayment; onHistory:()=>void; onEduzz:()=>void; onManual:()=>void; onUnblock:()=>void; isHistoryActive:boolean }) {
   const [hovered, setHovered] = useState(false)
   const color = STATUS_COLOR[student.payment_status] || 'var(--text-2)'
   return (
@@ -768,8 +567,7 @@ function StudentCard({ student, onHistory, onAsaas, onManual, onSub, onUnblock, 
           <TextBtn onClick={onUnblock} primary><ShieldCheck size={12} /> Reativar</TextBtn>
         ) : (
           <>
-            <TextBtn onClick={onAsaas} primary><Zap size={12} /> Cobrar</TextBtn>
-            <TextBtn onClick={onSub}><RefreshCw size={12} /> Assinar</TextBtn>
+            <TextBtn onClick={onEduzz} primary><Link size={12} /> Link</TextBtn>
             <TextBtn onClick={onManual}><Plus size={12} /> Manual</TextBtn>
           </>
         )}
