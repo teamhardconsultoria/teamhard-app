@@ -1,5 +1,11 @@
 import { useEffect, useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { Plus, X, Phone, Mail, Calendar, MessageCircle, UserCheck, Pencil, Trash2, Copy, Check, Instagram } from 'lucide-react'
+import {
+  DndContext, DragOverlay, useDraggable, useDroppable,
+  MouseSensor, TouchSensor, useSensor, useSensors,
+} from '@dnd-kit/core'
+import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 
@@ -74,19 +80,39 @@ export default function Leads() {
   const [modalError, setModalError] = useState('')
 
   // Convert modal
-  const [converting, setConverting]     = useState<Lead | null>(null)
-  const [convertForm, setConvertForm]   = useState(emptyConvert)
+  const [converting, setConverting]       = useState<Lead | null>(null)
+  const [convertForm, setConvertForm]     = useState(emptyConvert)
   const [convertSaving, setConvertSaving] = useState(false)
-  const [convertError, setConvertError] = useState('')
+  const [convertError, setConvertError]   = useState('')
   const [convertedPass, setConvertedPass] = useState('')
-  const [copied, setCopied]             = useState(false)
+  const [copied, setCopied]               = useState(false)
   const [convertedStudentId, setConvertedStudentId] = useState<string | null>(null)
   const [contractSending, setContractSending] = useState(false)
-  const [contractLink, setContractLink] = useState('')
+  const [contractLink, setContractLink]   = useState('')
   const [contractError, setContractError] = useState('')
 
   // Delete confirm
   const [deleting, setDeleting] = useState<Lead | null>(null)
+
+  // Drag-and-drop
+  const [dragLead, setDragLead] = useState<Lead | null>(null)
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
+    useSensor(TouchSensor,  { activationConstraint: { delay: 200, tolerance: 5 } })
+  )
+
+  function handleDragStart(event: DragStartEvent) {
+    const lead = leads.find(l => l.id === event.active.id)
+    if (lead) setDragLead(lead)
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setDragLead(null)
+    const { active, over } = event
+    if (!over) return
+    const lead = leads.find(l => l.id === active.id)
+    if (lead && lead.status !== over.id) moveStatus(lead, over.id as string)
+  }
 
   useEffect(() => { init() }, [])
 
@@ -108,7 +134,6 @@ export default function Leads() {
     setLeads((data as Lead[]) || [])
   }
 
-  // ── Open add modal
   function openAdd(defaultStatus = 'new') {
     setEditing(null)
     setForm({ ...emptyForm, status: defaultStatus })
@@ -116,7 +141,6 @@ export default function Leads() {
     setShowModal(true)
   }
 
-  // ── Open edit modal
   function openEdit(lead: Lead) {
     setEditing(lead)
     setForm({
@@ -133,7 +157,6 @@ export default function Leads() {
     setShowModal(true)
   }
 
-  // ── Save (create or update)
   async function handleSave() {
     if (!form.name.trim()) { setModalError('Nome é obrigatório.'); return }
     setSaving(true); setModalError('')
@@ -157,13 +180,11 @@ export default function Leads() {
     setShowModal(false)
   }
 
-  // ── Quick status move
   async function moveStatus(lead: Lead, newStatus: string) {
     await supabase.from('leads').update({ status: newStatus }).eq('id', lead.id)
     setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, status: newStatus } : l))
   }
 
-  // ── Delete
   async function handleDelete() {
     if (!deleting) return
     await supabase.from('leads').delete().eq('id', deleting.id)
@@ -171,7 +192,6 @@ export default function Leads() {
     setDeleting(null)
   }
 
-  // ── Convert to student
   function openConvert(lead: Lead) {
     setConverting(lead)
     setConvertForm(emptyConvert)
@@ -204,10 +224,10 @@ export default function Leads() {
           ? (PLAN_MONTHS[convertForm.plan_type] || 1)
           : convertForm.installment_count
         await supabase.rpc('generate_payment_schedule', {
-          p_student_id:        data.student_id,
-          p_plan_end:          calcPlanEnd(convertForm.plan_start, convertForm.plan_type),
-          p_plan_type:         convertForm.plan_type,
-          p_amount_per_inst:   parseFloat(convertForm.amount) / totalInst,
+          p_student_id:         data.student_id,
+          p_plan_end:           calcPlanEnd(convertForm.plan_start, convertForm.plan_type),
+          p_plan_type:          convertForm.plan_type,
+          p_amount_per_inst:    parseFloat(convertForm.amount) / totalInst,
           p_total_installments: totalInst,
         })
       }
@@ -290,50 +310,67 @@ export default function Leads() {
       </div>
 
       {/* Kanban */}
-      <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', padding: '0 28px 28px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-        {STATUSES.map(status => {
-          const cols = byStatus(status.key)
-          return (
-            <div key={status.key} style={{ flexShrink: 0, width: 270, display: 'flex', flexDirection: 'column', maxHeight: '100%' }}>
-              {/* Column header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, padding: '10px 12px', backgroundColor: status.bg, borderRadius: 10, border: `1px solid ${status.color}22` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: status.color, display: 'inline-block', flexShrink: 0 }} />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: status.color }}>{status.label}</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: status.color, opacity: 0.7, backgroundColor: `${status.color}22`, borderRadius: 8, padding: '1px 7px' }}>{cols.length}</span>
-                </div>
-                <button
-                  onClick={() => openAdd(status.key)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: status.color, opacity: 0.7, padding: 2, display: 'flex', alignItems: 'center' }}
-                  title={`Adicionar lead em ${status.label}`}
-                >
-                  <Plus size={15} />
-                </button>
-              </div>
-
-              {/* Cards */}
-              <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
-                {cols.map(lead => (
-                  <LeadCard
-                    key={lead.id}
-                    lead={lead}
-                    statusColor={status.color}
-                    onEdit={() => openEdit(lead)}
-                    onDelete={() => setDeleting(lead)}
-                    onConvert={() => openConvert(lead)}
-                    onMove={newStatus => moveStatus(lead, newStatus)}
-                  />
-                ))}
-                {cols.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-3)', fontSize: 13 }}>
-                    Nenhum lead
+      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', padding: '0 28px 28px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+          {STATUSES.map(status => {
+            const cols = byStatus(status.key)
+            return (
+              <DroppableColumn key={status.key} id={status.key} color={status.color}>
+                {/* Column header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, padding: '10px 12px', backgroundColor: status.bg, borderRadius: 10, border: `1px solid ${status.color}22` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: status.color, display: 'inline-block', flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: status.color }}>{status.label}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: status.color, opacity: 0.7, backgroundColor: `${status.color}22`, borderRadius: 8, padding: '1px 7px' }}>{cols.length}</span>
                   </div>
-                )}
-              </div>
+                  <button
+                    onClick={() => openAdd(status.key)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: status.color, opacity: 0.7, padding: 2, display: 'flex', alignItems: 'center' }}
+                    title={`Adicionar lead em ${status.label}`}
+                  >
+                    <Plus size={15} />
+                  </button>
+                </div>
+
+                {/* Cards */}
+                <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, flex: 1, padding: '2px 0' }}>
+                  {cols.map(lead => (
+                    <LeadCard
+                      key={lead.id}
+                      lead={lead}
+                      statusColor={status.color}
+                      onEdit={() => openEdit(lead)}
+                      onDelete={() => setDeleting(lead)}
+                      onConvert={() => openConvert(lead)}
+                      onMove={newStatus => moveStatus(lead, newStatus)}
+                    />
+                  ))}
+                  {cols.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-3)', fontSize: 13 }}>
+                      Nenhum lead
+                    </div>
+                  )}
+                </div>
+              </DroppableColumn>
+            )
+          })}
+        </div>
+
+        <DragOverlay dropAnimation={null}>
+          {dragLead ? (
+            <div style={{
+              backgroundColor: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 12, padding: '12px 14px', width: 250,
+              boxShadow: '0 12px 36px rgba(0,0,0,0.45)',
+              transform: 'rotate(2deg)', opacity: 0.95, cursor: 'grabbing',
+            }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{dragLead.name}</p>
+              {dragLead.phone && <p style={{ fontSize: 12, color: 'var(--text-2)', margin: '4px 0 0' }}>{dragLead.phone}</p>}
+              {dragLead.instagram && <p style={{ fontSize: 12, color: '#E1306C', margin: '2px 0 0' }}>@{dragLead.instagram}</p>}
             </div>
-          )
-        })}
-      </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
       {/* ── Modal Add/Edit ── */}
       {showModal && (
@@ -578,36 +615,74 @@ export default function Leads() {
   )
 }
 
+// ── Droppable Column ───────────────────────────────────────────────────────────
+function DroppableColumn({ id, color, children }: { id: string; color: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        flexShrink: 0, width: 270, display: 'flex', flexDirection: 'column', maxHeight: '100%',
+        borderRadius: 12, transition: 'box-shadow 0.15s',
+        boxShadow: isOver ? `0 0 0 2px ${color}` : 'none',
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
 // ── Lead Card ─────────────────────────────────────────────────────────────────
 function LeadCard({ lead, statusColor, onEdit, onDelete, onConvert, onMove }: {
-  lead: Lead
-  statusColor: string
-  onEdit: () => void
-  onDelete: () => void
-  onConvert: () => void
-  onMove: (s: string) => void
+  lead: Lead; statusColor: string
+  onEdit: () => void; onDelete: () => void; onConvert: () => void; onMove: (s: string) => void
 }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: lead.id })
+
   const [showMove, setShowMove] = useState(false)
+  const [dropPos, setDropPos] = useState<{ top: number; right: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!showMove) return
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setShowMove(false) }
+    const h = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (btnRef.current && btnRef.current.contains(t)) return
+      setShowMove(false)
+    }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
   }, [showMove])
+
+  function openMove() {
+    if (btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      setDropPos({ top: r.bottom + 6, right: window.innerWidth - r.right })
+    }
+    setShowMove(v => !v)
+  }
 
   const src = lead.source ? SOURCE_MAP[lead.source] : null
   const overdue = isOverdue(lead.next_contact_at)
   const waPhone = lead.phone ? `https://wa.me/55${lead.phone.replace(/\D/g, '')}` : null
 
   return (
-    <div style={{
-      backgroundColor: 'var(--surface)', border: '1px solid var(--border)',
-      borderRadius: 12, padding: 14, borderLeft: `3px solid ${statusColor}`,
-    }}>
-      {/* Name + source */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      style={{
+        backgroundColor: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 12, padding: 14, borderLeft: `3px solid ${statusColor}`,
+        opacity: isDragging ? 0.35 : 1,
+        transition: 'opacity 0.15s',
+      }}
+    >
+      {/* Drag handle — name + source (arraste aqui) */}
+      <div
+        {...listeners}
+        style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10, cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
+      >
         <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0, lineHeight: 1.3 }}>{lead.name}</p>
         {src && (
           <span style={{ fontSize: 10, fontWeight: 700, color: src.color, backgroundColor: `${src.color}18`, borderRadius: 6, padding: '2px 7px', flexShrink: 0, border: `1px solid ${src.color}30` }}>
@@ -618,10 +693,11 @@ function LeadCard({ lead, statusColor, onEdit, onDelete, onConvert, onMove }: {
 
       {/* Contact info */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 10 }}>
-        {lead.phone && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)' }}>
+        {lead.phone && waPhone && (
+          <a href={waPhone} target="_blank" rel="noreferrer"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)', textDecoration: 'none' }}>
             <Phone size={11} /> {lead.phone}
-          </span>
+          </a>
         )}
         {lead.email && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -665,14 +741,13 @@ function LeadCard({ lead, statusColor, onEdit, onDelete, onConvert, onMove }: {
         )}
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-          {/* Move status */}
           <div ref={ref} style={{ position: 'relative' }}>
-            <button onClick={() => setShowMove(v => !v)}
+            <button ref={btnRef} onClick={openMove}
               style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 7, padding: '4px 7px', cursor: 'pointer', color: 'var(--text-2)', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
               Mover ▾
             </button>
-            {showMove && (
-              <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', right: 0, backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 6px 20px rgba(0,0,0,0.25)', zIndex: 50, overflow: 'hidden', minWidth: 140 }}>
+            {showMove && dropPos && createPortal(
+              <div style={{ position: 'fixed', top: dropPos.top, right: dropPos.right, backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 6px 20px rgba(0,0,0,0.25)', zIndex: 9999, overflow: 'hidden', minWidth: 140 }}>
                 {STATUSES.filter(s => s.key !== lead.status).map(s => (
                   <button key={s.key} onClick={() => { onMove(s.key); setShowMove(false) }}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontSize: 13, color: 'var(--text)' }}
@@ -683,7 +758,8 @@ function LeadCard({ lead, statusColor, onEdit, onDelete, onConvert, onMove }: {
                     {s.label}
                   </button>
                 ))}
-              </div>
+              </div>,
+              document.body
             )}
           </div>
 
