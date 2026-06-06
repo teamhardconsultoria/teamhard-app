@@ -15,4 +15,4 @@ web-build/
 *.key
 *.mobileprovision
 *.orig.*
-yarn-error.log
+yarn-error.log%ProgramData%
