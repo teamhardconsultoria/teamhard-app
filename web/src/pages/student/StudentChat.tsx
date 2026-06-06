@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Send, Mic, Play, Pause, Paperclip, X } from 'lucide-react'
+import { Send, Mic, Play, Pause, Paperclip, X, Camera, ImageIcon, File } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 
@@ -23,8 +23,11 @@ export default function StudentChat() {
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [lightbox, setLightbox] = useState<string | null>(null)
+  const [showAttachMenu, setShowAttachMenu] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const galleryInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
 
   const [isRecording, setIsRecording] = useState(false)
   const [recDuration, setRecDuration] = useState(0)
@@ -157,7 +160,40 @@ export default function StudentChat() {
           <img src={lightbox} alt="" style={{ maxWidth:'90vw', maxHeight:'90vh', objectFit:'contain', borderRadius:8 }} />
         </div>
       )}
-      <input ref={fileInputRef} type="file" accept="*" style={{ display:'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) sendFile(f); e.target.value = '' }} />
+      {/* Inputs ocultos para cada tipo de anexo */}
+      <input ref={galleryInputRef} type="file" accept="image/*,video/*" style={{ display:'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) sendFile(f); e.target.value = '' }} />
+      <input ref={cameraInputRef}  type="file" accept="image/*" capture="environment" style={{ display:'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) sendFile(f); e.target.value = '' }} />
+      <input ref={fileInputRef}    type="file" accept="*" style={{ display:'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) sendFile(f); e.target.value = '' }} />
+
+      {/* Menu de anexo (bottom sheet) */}
+      {showAttachMenu && (
+        <div onClick={() => setShowAttachMenu(false)}
+          style={{ position:'fixed', inset:0, zIndex:200, backgroundColor:'rgba(0,0,0,0.5)', display:'flex', alignItems:'flex-end' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width:'100%', backgroundColor:'var(--surface)', borderRadius:'20px 20px 0 0', padding:'8px 0 max(24px, env(safe-area-inset-bottom, 24px))' }}>
+            {/* Handle */}
+            <div style={{ width:36, height:4, borderRadius:2, backgroundColor:'var(--border)', margin:'8px auto 16px' }} />
+            {[
+              { icon: <Camera size={22} color="#E8FF00" />, label: 'Câmera',  sub: 'Tirar uma foto agora',       action: () => cameraInputRef.current?.click()  },
+              { icon: <ImageIcon size={22} color="#E8FF00" />, label: 'Galeria', sub: 'Escolher foto ou vídeo',    action: () => galleryInputRef.current?.click() },
+              { icon: <File size={22} color="#E8FF00" />,    label: 'Arquivo', sub: 'PDF, doc, zip e outros…',   action: () => fileInputRef.current?.click()    },
+            ].map(opt => (
+              <button key={opt.label} onClick={() => { opt.action(); setShowAttachMenu(false) }}
+                style={{ width:'100%', display:'flex', alignItems:'center', gap:16, padding:'14px 24px', background:'none', border:'none', cursor:'pointer', textAlign:'left' }}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--surface-hover, rgba(255,255,255,0.04))')}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                <div style={{ width:44, height:44, borderRadius:12, backgroundColor:'rgba(232,255,0,0.1)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                  {opt.icon}
+                </div>
+                <div>
+                  <p style={{ fontSize:15, fontWeight:700, color:'var(--text)', margin:0 }}>{opt.label}</p>
+                  <p style={{ fontSize:12, color:'var(--text-2)', margin:0 }}>{opt.sub}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 20px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
@@ -229,10 +265,10 @@ export default function StudentChat() {
           </>
         ) : (
           <>
-            <button onClick={() => fileInputRef.current?.click()} title="Enviar arquivo (máx. 3MB)"
-              style={{ width:36, height:36, borderRadius:8, border:'none', backgroundColor:'transparent', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:'var(--text-2)' }}
+            <button onClick={() => setShowAttachMenu(v => !v)} title="Enviar anexo"
+              style={{ width:36, height:36, borderRadius:8, border:'none', backgroundColor: showAttachMenu ? 'var(--surface)' : 'transparent', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color: showAttachMenu ? '#E8FF00' : 'var(--text-2)' }}
               onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--surface)')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
+              onMouseLeave={e => { if (!showAttachMenu) e.currentTarget.style.backgroundColor = 'transparent' }}>
               <Paperclip size={18} />
             </button>
             <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={handleKey} placeholder="Mensagem... (Enter para enviar)" rows={1}
