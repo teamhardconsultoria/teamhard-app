@@ -27,6 +27,18 @@ export default function StudentHome() {
 
   useEffect(() => { load() }, [])
 
+  useEffect(() => {
+    if (!user) return
+    const sub = supabase.channel(`home-unread-${user.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        const msg = payload.new as any
+        if (msg.receiver_id === user.id) {
+          setData(prev => prev ? { ...prev, unreadMessages: prev.unreadMessages + 1 } : prev)
+        }
+      }).subscribe()
+    return () => { supabase.removeChannel(sub) }
+  }, [user])
+
   const load = async () => {
     const { data: student } = await supabase.from('students')
       .select('id, payment_status, plan_end').eq('user_id', user!.id).single()

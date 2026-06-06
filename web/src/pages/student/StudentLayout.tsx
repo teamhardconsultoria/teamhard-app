@@ -26,9 +26,11 @@ export default function StudentLayout() {
       setUnread(count || 0)
     }
     fetchUnread()
-    const sub = supabase.channel('student-unread')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` }, () => {
-        setUnread(p => p + 1)
+    const sub = supabase.channel(`student-unread-${user.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        const msg = payload.new as any
+        if (msg.receiver_id !== user.id) return
+        if (!window.location.pathname.startsWith('/student/chat')) setUnread(p => p + 1)
       }).subscribe()
     return () => { supabase.removeChannel(sub) }
   }, [user])
