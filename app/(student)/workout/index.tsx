@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState, useCallback } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/auth'
@@ -14,9 +14,9 @@ export default function WorkoutListScreen() {
   const [workout, setWorkout] = useState<Workout | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     const fetchWorkout = async () => {
-      const today = new Date().toISOString().split('T')[0]
+      setLoading(true)
       const { data: student } = await supabase.from('students').select('id').eq('user_id', user!.id).single()
       if (!student) { setLoading(false); return }
 
@@ -34,15 +34,15 @@ export default function WorkoutListScreen() {
         `)
         .eq('student_id', student.id)
         .eq('active', true)
-        .lte('valid_from', today)
-        .gte('valid_to', today)
+        .order('valid_from', { ascending: false })
+        .limit(1)
         .maybeSingle()
 
       setWorkout(data)
       setLoading(false)
     }
     fetchWorkout()
-  }, [])
+  }, []))
 
   if (loading) {
     return (

@@ -1,17 +1,33 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, ActivityIndicator,
+  ScrollView, Alert, ActivityIndicator, KeyboardAvoidingView,
 } from 'react-native'
 import { router } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/auth'
 import { colors } from '@/lib/theme'
 
 const TOTAL_STEPS = 6
 
+function maskBirthDate(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8)
+  if (digits.length <= 2) return digits
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`
+}
+
+function birthDateToISO(formatted: string): string | null {
+  const parts = formatted.split('/')
+  if (parts.length !== 3 || parts[2].length !== 4) return null
+  const [d, m, y] = parts
+  return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+}
+
 export default function AnamneseScreen() {
-  const { user } = useAuthStore()
+  const { user, setUser } = useAuthStore()
+  const insets = useSafeAreaInsets()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
 
@@ -61,6 +77,60 @@ export default function AnamneseScreen() {
 
   const set = (key: string, value: any) => setData(prev => ({ ...prev, [key]: value }))
 
+  useEffect(() => {
+    const loadExisting = async () => {
+      const { data: studentData } = await supabase
+        .from('students').select('id').eq('user_id', user!.id).single()
+      if (!studentData) return
+
+      const { data: ex } = await supabase
+        .from('anamnese').select('*').eq('student_id', studentData.id).maybeSingle()
+      if (!ex) return
+
+      setData(prev => ({
+        ...prev,
+        full_name: ex.full_name || prev.full_name,
+        birth_date: ex.birth_date
+          ? (() => { const [y, m, d] = ex.birth_date.split('-'); return `${d}/${m}/${y}` })()
+          : prev.birth_date,
+        biological_sex: ex.biological_sex || prev.biological_sex,
+        city: ex.city || prev.city,
+        country: ex.country || prev.country,
+        profession: ex.profession || prev.profession,
+        goal: ex.goal || prev.goal,
+        current_weight: ex.current_weight != null ? String(ex.current_weight) : prev.current_weight,
+        height: ex.height != null ? String(ex.height) : prev.height,
+        desired_weight: ex.desired_weight != null ? String(ex.desired_weight) : prev.desired_weight,
+        goal_months: ex.goal_months != null ? String(ex.goal_months) : prev.goal_months,
+        has_disease: ex.has_disease ?? prev.has_disease,
+        disease_description: ex.disease_description || prev.disease_description,
+        uses_medication: ex.uses_medication ?? prev.uses_medication,
+        medication_description: ex.medication_description || prev.medication_description,
+        has_injury: ex.has_injury ?? prev.has_injury,
+        injury_description: ex.injury_description || prev.injury_description,
+        has_limitation: ex.has_limitation ?? prev.has_limitation,
+        limitation_description: ex.limitation_description || prev.limitation_description,
+        is_pregnant: ex.is_pregnant ?? prev.is_pregnant,
+        has_allergy: ex.has_allergy ?? prev.has_allergy,
+        allergy_description: ex.allergy_description || prev.allergy_description,
+        food_restrictions: ex.food_restrictions || prev.food_restrictions,
+        meals_per_day: ex.meals_per_day != null ? String(ex.meals_per_day) : prev.meals_per_day,
+        water_liters: ex.water_liters != null ? String(ex.water_liters) : prev.water_liters,
+        alcohol_consumption: ex.alcohol_consumption || prev.alcohol_consumption,
+        sleep_hours: ex.sleep_hours != null ? String(ex.sleep_hours) : prev.sleep_hours,
+        stress_level: ex.stress_level != null ? String(ex.stress_level) : prev.stress_level,
+        work_type: ex.work_type || prev.work_type,
+        has_busy_routine: ex.has_busy_routine ?? prev.has_busy_routine,
+        preferred_workout_time: ex.preferred_workout_time || prev.preferred_workout_time,
+        gym_experience: ex.gym_experience || prev.gym_experience,
+        practices_sport: ex.practices_sport ?? prev.practices_sport,
+        sport_description: ex.sport_description || prev.sport_description,
+        fitness_level: ex.fitness_level || prev.fitness_level,
+      }))
+    }
+    loadExisting()
+  }, [])
+
   const validate = () => {
     if (step === 1 && (!data.full_name || !data.birth_date || !data.biological_sex)) {
       Alert.alert('Campos obrigatórios', 'Preencha nome, data de nascimento e sexo.')
@@ -93,6 +163,7 @@ export default function AnamneseScreen() {
       await supabase.from('anamnese').upsert({
         student_id: studentData.id,
         ...data,
+        birth_date: birthDateToISO(data.birth_date) ?? data.birth_date,
         current_weight: parseFloat(data.current_weight),
         height: parseFloat(data.height),
         desired_weight: data.desired_weight ? parseFloat(data.desired_weight) : null,
@@ -104,6 +175,14 @@ export default function AnamneseScreen() {
         completed: true,
       })
 
+      await supabase.from('students').update({
+        birth_date: birthDateToISO(data.birth_date),
+        height: parseFloat(data.height),
+        initial_weight: parseFloat(data.current_weight),
+      }).eq('id', studentData.id)
+
+      await supabase.from('users').update({ anamnese_completed: true }).eq('id', user!.id)
+      setUser({ ...user!, anamnese_completed: true })
       router.replace('/(student)/home')
     } catch (err: any) {
       Alert.alert('Erro', err.message)
@@ -113,7 +192,7 @@ export default function AnamneseScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior="padding">
       {/* Progress */}
       <View style={styles.progressWrap}>
         <Text style={styles.progressLabel}>Passo {step} de {TOTAL_STEPS}</Text>
@@ -131,7 +210,7 @@ export default function AnamneseScreen() {
         {step === 6 && <BlocoF data={data} set={set} />}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: 24 + insets.bottom }]}>
         {step > 1 && (
           <TouchableOpacity style={styles.backBtn} onPress={() => setStep(step - 1)}>
             <Text style={styles.backText}>Voltar</Text>
@@ -148,7 +227,7 @@ export default function AnamneseScreen() {
           }
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -164,7 +243,15 @@ function BlocoA({ data, set }: any) {
       </Field>
 
       <Field label="Data de nascimento" required>
-        <TextInput style={s.input} value={data.birth_date} onChangeText={v => set('birth_date', v)} placeholder="DD/MM/AAAA" placeholderTextColor={colors.subtext} keyboardType="numeric" />
+        <TextInput
+          style={s.input}
+          value={data.birth_date}
+          onChangeText={v => set('birth_date', maskBirthDate(v))}
+          placeholder="DD/MM/AAAA"
+          placeholderTextColor={colors.subtext}
+          keyboardType="numeric"
+          maxLength={10}
+        />
       </Field>
 
       <Field label="Sexo biológico" required>

@@ -7,8 +7,9 @@ import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/auth'
 import { colors } from '@/lib/theme'
+import { DatePickerField } from '@/components/DatePickerField'
 
-type QuestionType = 'text' | 'number' | 'scale' | 'single' | 'multiple'
+type QuestionType = 'text' | 'number' | 'scale' | 'single' | 'multiple' | 'date'
 
 interface Question {
   id: string
@@ -190,6 +191,14 @@ export default function QuestionnairesScreen() {
                   </Text>
                 </TouchableOpacity>
               ))}
+
+              {q.type === 'date' && (
+                <DatePickerField
+                  label=""
+                  value={answers[q.id] || ''}
+                  onChange={v => setAnswer(q.id, v)}
+                />
+              )}
 
               {q.type === 'multiple' && (q.options || []).map(opt => {
                 const selected2 = (answers[q.id] || []).includes(opt)

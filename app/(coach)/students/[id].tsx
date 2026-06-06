@@ -1,258 +1,165 @@
 import { useEffect, useState } from 'react'
-import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Image, Modal, Dimensions, RefreshControl,
-} from 'react-native'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '@/lib/supabase'
 import { colors } from '@/lib/theme'
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window')
-
-interface AssessmentPhoto {
-  angle: string
-  photo_url: string
+const STATUS_LABEL: Record<string, string> = {
+  active: 'Em dia', pending: 'Pendente', overdue: 'Vencido', blocked: 'Bloqueado',
+}
+const STATUS_COLOR: Record<string, string> = {
+  active: colors.success, pending: colors.warning, overdue: colors.error, blocked: colors.error,
 }
 
-interface Assessment {
-  id: string
-  created_at: string
-  weight: number | null
-  height: number | null
-  body_fat_pct: number | null
-  notes: string | null
-  photos: AssessmentPhoto[]
-}
-
-const ANGLE_LABELS: Record<string, string> = {
-  front: 'Frente',
-  back: 'Costas',
-  left: 'Lado esq.',
-  right: 'Lado dir.',
-}
-
-export default function StudentAssessmentsScreen() {
+export default function StudentHub() {
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>()
-  const [assessments, setAssessments] = useState<Assessment[]>([])
+  const [student, setStudent] = useState<any>(null)
+  const [counts, setCounts] = useState({ feedbacks: 0, assessments: 0 })
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
-
-  const load = async () => {
-    const { data: assData } = await supabase
-      .from('assessments')
-      .select('id, created_at, weight, height, body_fat_pct, notes')
-      .eq('student_id', id)
-      .order('created_at', { ascending: false })
-
-    if (!assData) { setLoading(false); setRefreshing(false); return }
-
-    const list: Assessment[] = await Promise.all(
-      assData.map(async (a) => {
-        const { data: photos } = await supabase
-          .from('assessment_photos')
-          .select('angle, photo_url')
-          .eq('assessment_id', a.id)
-        return { ...a, photos: photos || [] }
-      })
-    )
-
-    setAssessments(list)
-    setLoading(false)
-    setRefreshing(false)
-  }
 
   useEffect(() => { load() }, [id])
 
-  const onRefresh = async () => { setRefreshing(true); await load() }
+  const load = async () => {
+    const [studentRes, feedbackRes, assessRes] = await Promise.all([
+      supabase.from('students')
+        .select('id, payment_status, plan_end, plan_type, user:users(name, email)')
+        .eq('id', id).single(),
+      supabase.from('training_feedbacks')
+        .select('id', { count: 'exact', head: true })
+        .eq('student_id', id).eq('read_by_coach', false),
+      supabase.from('assessments')
+        .select('id', { count: 'exact', head: true })
+        .eq('student_id', id).eq('read_by_coach', false),
+    ])
+    setStudent(studentRes.data)
+    setCounts({ feedbacks: feedbackRes.count || 0, assessments: assessRes.count || 0 })
+    setLoading(false)
+  }
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color={colors.yellow} /></View>
+  const studentName = (student?.user as any)?.name || name || '?'
+  const planEnd = student?.plan_end ? new Date(student.plan_end) : null
+  const daysLeft = planEnd ? Math.ceil((planEnd.getTime() - Date.now()) / 86400000) : null
+  const status = student?.payment_status || 'active'
+
+  const go = (sub: string) =>
+    router.push({ pathname: `/(coach)/students/${sub}` as any, params: { id, name: studentName } })
+
+  if (loading) return <View style={s.center}><ActivityIndicator color={colors.yellow} /></View>
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.back}>
+    <View style={s.container}>
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => router.back()} style={s.back}>
           <Ionicons name="arrow-back" size={22} color={colors.text} />
         </TouchableOpacity>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{(name || '?').charAt(0)}</Text>
+        <View style={s.avatar}>
+          <Text style={s.avatarText}>{studentName.charAt(0)}</Text>
         </View>
-        <View style={styles.headerInfo}>
-          <Text style={styles.headerName}>{name}</Text>
-          <Text style={styles.headerSub}>
-            {assessments.length} avaliação{assessments.length !== 1 ? 'ões' : ''}
-          </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={s.headerName} numberOfLines={1}>{studentName}</Text>
+          <Text style={s.headerEmail} numberOfLines={1}>{(student?.user as any)?.email}</Text>
         </View>
+        <TouchableOpacity style={s.chatBtn} onPress={() => router.push('/(coach)/chat')}>
+          <Ionicons name="chatbubble" size={18} color={colors.yellow} />
+        </TouchableOpacity>
       </View>
 
-      {assessments.length === 0 ? (
-        <View style={styles.center}>
-          <Ionicons name="camera-outline" size={40} color={colors.subtext} />
-          <Text style={styles.empty}>Nenhuma avaliação ainda.</Text>
-        </View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.yellow} />}
-        >
-          {assessments.map((a, idx) => (
-            <View key={a.id} style={styles.card}>
-              {/* Card header */}
-              <View style={styles.cardHeader}>
-                <View style={styles.indexBadge}>
-                  <Text style={styles.indexText}>#{assessments.length - idx}</Text>
-                </View>
-                <Text style={styles.cardDate}>
-                  {new Date(a.created_at).toLocaleDateString('pt-BR', {
-                    day: '2-digit', month: 'long', year: 'numeric',
-                  })}
+      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+        {/* Status card */}
+        <View style={s.statusCard}>
+          <View style={s.statusRow}>
+            <View style={[s.statusDot, { backgroundColor: STATUS_COLOR[status] || colors.subtext }]} />
+            <Text style={[s.statusText, { color: STATUS_COLOR[status] || colors.subtext }]}>
+              {STATUS_LABEL[status] || status}
+            </Text>
+          </View>
+          {planEnd && (
+            <Text style={s.planEnd}>
+              Plano até {planEnd.toLocaleDateString('pt-BR')}
+              {daysLeft !== null && daysLeft <= 7 && (
+                <Text style={{ color: colors.error }}>
+                  {' '}({daysLeft <= 0 ? 'expirado' : `${daysLeft}d`})
                 </Text>
-              </View>
-
-              {/* Stats row */}
-              <View style={styles.statsRow}>
-                {a.weight != null && (
-                  <View style={styles.stat}>
-                    <Text style={styles.statValue}>{a.weight} kg</Text>
-                    <Text style={styles.statLabel}>Peso</Text>
-                  </View>
-                )}
-                {a.height != null && (
-                  <View style={styles.stat}>
-                    <Text style={styles.statValue}>{a.height} cm</Text>
-                    <Text style={styles.statLabel}>Altura</Text>
-                  </View>
-                )}
-                {a.body_fat_pct != null && (
-                  <View style={styles.stat}>
-                    <Text style={styles.statValue}>{a.body_fat_pct}%</Text>
-                    <Text style={styles.statLabel}>% Gordura</Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Notes */}
-              {!!a.notes && (
-                <View style={styles.notesWrap}>
-                  <Text style={styles.notesLabel}>Observações</Text>
-                  <Text style={styles.notesText}>{a.notes}</Text>
-                </View>
               )}
-
-              {/* Photos */}
-              {a.photos.length > 0 && (
-                <View style={styles.photosSection}>
-                  <Text style={styles.photosLabel}>Fotos</Text>
-                  <View style={styles.photosGrid}>
-                    {a.photos.map((p) => (
-                      <TouchableOpacity
-                        key={p.angle}
-                        style={styles.photoWrap}
-                        onPress={() => setLightboxUrl(p.photo_url)}
-                        activeOpacity={0.85}
-                      >
-                        <Image
-                          source={{ uri: p.photo_url }}
-                          style={styles.photo}
-                          resizeMode="cover"
-                        />
-                        <View style={styles.photoLabel}>
-                          <Text style={styles.photoLabelText}>
-                            {ANGLE_LABELS[p.angle] || p.angle}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              )}
-            </View>
-          ))}
-        </ScrollView>
-      )}
-
-      {/* Lightbox */}
-      <Modal visible={!!lightboxUrl} transparent animationType="fade" onRequestClose={() => setLightboxUrl(null)}>
-        <View style={styles.lightboxBg}>
-          <TouchableOpacity style={styles.lightboxClose} onPress={() => setLightboxUrl(null)}>
-            <Ionicons name="close" size={28} color="#fff" />
-          </TouchableOpacity>
-          {lightboxUrl && (
-            <Image
-              source={{ uri: lightboxUrl }}
-              style={styles.lightboxImg}
-              resizeMode="contain"
-            />
+            </Text>
           )}
         </View>
-      </Modal>
+
+        {/* Menu */}
+        <View style={s.menu}>
+          <MenuItem icon="barbell" label="Treinos" sub="Montar e gerenciar treinos" onPress={() => go('workouts')} />
+          <MenuItem icon="nutrition" label="Dieta" sub="Montar e gerenciar dietas" onPress={() => go('diets')} />
+          <MenuItem icon="camera" label="Avaliações" sub="Fotos e medidas corporais"
+            badge={counts.assessments} onPress={() => go('assessments')} />
+          <MenuItem icon="star" label="Feedbacks" sub="Respostas após treinos"
+            badge={counts.feedbacks} onPress={() => go('feedbacks')} />
+        </View>
+      </ScrollView>
     </View>
   )
 }
 
-const PHOTO_SIZE = (SCREEN_WIDTH - 32 - 16 - 8) / 2
+function MenuItem({ icon, label, sub, badge, onPress }: {
+  icon: string; label: string; sub: string; badge?: number; onPress: () => void
+}) {
+  return (
+    <TouchableOpacity style={s.menuItem} onPress={onPress} activeOpacity={0.7}>
+      <View style={s.menuIcon}>
+        <Ionicons name={icon as any} size={20} color={colors.yellow} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={s.menuLabel}>{label}</Text>
+        <Text style={s.menuSub}>{sub}</Text>
+      </View>
+      {(badge ?? 0) > 0 && (
+        <View style={s.badge}>
+          <Text style={s.badgeText}>{badge! > 9 ? '9+' : badge}</Text>
+        </View>
+      )}
+      <Ionicons name="chevron-forward" size={16} color={colors.subtext} />
+    </TouchableOpacity>
+  )
+}
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.dark },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  empty: { color: colors.subtext, fontSize: 14 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.dark },
   header: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   back: { padding: 4 },
-  avatar: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: colors.yellow, alignItems: 'center', justifyContent: 'center',
-  },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.yellow, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 16, fontWeight: '800', color: '#0A0A0A' },
-  headerInfo: { flex: 1 },
-  headerName: { fontSize: 16, fontWeight: '700', color: colors.text },
-  headerSub: { fontSize: 12, color: colors.subtext, marginTop: 1 },
-  list: { padding: 16, gap: 16 },
-  card: {
-    backgroundColor: colors.card, borderRadius: 16,
-    borderWidth: 1, borderColor: colors.border,
-    padding: 16, gap: 14,
+  headerName: { fontSize: 15, fontWeight: '700', color: colors.text },
+  headerEmail: { fontSize: 11, color: colors.subtext },
+  chatBtn: { padding: 10, backgroundColor: colors.card, borderRadius: 10, borderWidth: 1, borderColor: colors.border },
+  content: { padding: 20, gap: 12, paddingBottom: 40 },
+  statusCard: {
+    backgroundColor: colors.card, borderRadius: 14,
+    borderWidth: 1, borderColor: colors.border, padding: 14, gap: 4,
   },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  indexBadge: {
-    backgroundColor: `${colors.yellow}20`, borderRadius: 8,
-    paddingHorizontal: 8, paddingVertical: 2,
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  statusText: { fontSize: 13, fontWeight: '700' },
+  planEnd: { fontSize: 12, color: colors.subtext },
+  menu: { gap: 8 },
+  menuItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    backgroundColor: colors.card, borderRadius: 14,
+    borderWidth: 1, borderColor: colors.border, padding: 16,
   },
-  indexText: { fontSize: 11, fontWeight: '800', color: colors.yellow },
-  cardDate: { fontSize: 14, fontWeight: '700', color: colors.text },
-  statsRow: { flexDirection: 'row', gap: 24 },
-  stat: { gap: 2 },
-  statValue: { fontSize: 18, fontWeight: '800', color: colors.text },
-  statLabel: { fontSize: 11, color: colors.subtext },
-  notesWrap: {
-    backgroundColor: `${colors.border}55`, borderRadius: 10, padding: 12, gap: 4,
+  menuIcon: {
+    width: 42, height: 42, borderRadius: 10,
+    backgroundColor: colors.yellow + '18', alignItems: 'center', justifyContent: 'center',
   },
-  notesLabel: { fontSize: 11, fontWeight: '700', color: colors.subtext, textTransform: 'uppercase', letterSpacing: 0.5 },
-  notesText: { fontSize: 13, color: colors.text, lineHeight: 18 },
-  photosSection: { gap: 10 },
-  photosLabel: { fontSize: 11, fontWeight: '700', color: colors.subtext, textTransform: 'uppercase', letterSpacing: 0.5 },
-  photosGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  photoWrap: { width: PHOTO_SIZE, borderRadius: 12, overflow: 'hidden', position: 'relative' },
-  photo: { width: PHOTO_SIZE, height: PHOTO_SIZE * 1.25 },
-  photoLabel: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 5, paddingHorizontal: 8,
+  menuLabel: { fontSize: 15, fontWeight: '700', color: colors.text },
+  menuSub: { fontSize: 12, color: colors.subtext, marginTop: 1 },
+  badge: {
+    backgroundColor: colors.yellow, borderRadius: 10, minWidth: 20, height: 20,
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
   },
-  photoLabelText: { fontSize: 11, fontWeight: '600', color: '#fff' },
-  lightboxBg: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.95)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  lightboxClose: {
-    position: 'absolute', top: 56, right: 20, zIndex: 10,
-    backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 20,
-    padding: 6,
-  },
-  lightboxImg: { width: SCREEN_WIDTH, height: SCREEN_WIDTH * 1.4 },
+  badgeText: { fontSize: 10, fontWeight: '800', color: '#0A0A0A' },
 })

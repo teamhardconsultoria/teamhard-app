@@ -3,14 +3,18 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import * as Notifications from 'expo-notifications'
 import { useAuthStore } from '@/store/auth'
+import { supabase } from '@/lib/supabase'
 import { colors } from '@/lib/theme'
 
 export default function ChangePasswordScreen() {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [loading, setLoading] = useState(false)
-  const { changePassword, signOut } = useAuthStore()
+  const { changePassword, signOut, user } = useAuthStore()
+  const insets = useSafeAreaInsets()
 
   const handleChange = async () => {
     if (password.length < 8) {
@@ -23,7 +27,23 @@ export default function ChangePasswordScreen() {
     }
     setLoading(true)
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const isFirstEverLogin = !user?.anamnese_completed
       await changePassword(password)
+      if (isFirstEverLogin && session?.user?.id) {
+        supabase.functions.invoke('send-welcome-message', {
+          body: { student_user_id: session.user.id },
+        })
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: '📸 Faça sua primeira avaliação!',
+            body: 'Envie suas fotos para o seu coach iniciar seu acompanhamento.',
+            sound: true,
+            data: { screen: '/(student)/assessments' },
+          },
+          trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 5, channelId: 'default' },
+        })
+      }
     } catch (err: any) {
       Alert.alert('Erro', err.message)
     } finally {
@@ -34,9 +54,9 @@ export default function ChangePasswordScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
     >
-      <View style={styles.inner}>
+      <View style={[styles.inner, { paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.header}>
           <View style={styles.badge}>
             <Text style={styles.badgeText}>Primeiro acesso</Text>

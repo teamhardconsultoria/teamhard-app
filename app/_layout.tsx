@@ -1,24 +1,28 @@
 import { useEffect } from 'react'
+import { Alert, LogBox } from 'react-native'
 import { Stack, router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
-import * as SplashScreen from 'expo-splash-screen'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/auth'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 
-SplashScreen.preventAutoHideAsync()
+LogBox.ignoreLogs(['unable to activate keep awake', 'Unable to activate keep awake'])
 
 export default function RootLayout() {
   const { setSession, fetchUser, user, loading } = useAuthStore()
   usePushNotifications()
 
   useEffect(() => {
+    const timeout = setTimeout(() => {
+      useAuthStore.setState({ user: null, loading: false })
+    }, 8000)
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      if (session) fetchUser()
-      else useAuthStore.setState({ loading: false })
-    })
+      if (session) fetchUser().finally(() => clearTimeout(timeout))
+      else { useAuthStore.setState({ loading: false }); clearTimeout(timeout) }
+    }).catch(() => { useAuthStore.setState({ user: null, loading: false }); clearTimeout(timeout) })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
@@ -26,12 +30,11 @@ export default function RootLayout() {
       else useAuthStore.setState({ user: null, loading: false })
     })
 
-    return () => subscription.unsubscribe()
+    return () => { subscription.unsubscribe(); clearTimeout(timeout) }
   }, [])
 
   useEffect(() => {
     if (loading) return
-    SplashScreen.hideAsync()
 
     if (!user) {
       router.replace('/(auth)/login')
@@ -45,7 +48,11 @@ export default function RootLayout() {
       }
 
       if (user.role === 'student') {
-        router.replace('/(student)/home')
+        if (!user.anamnese_completed) {
+          router.replace('/onboarding/anamnese')
+        } else {
+          router.replace('/(student)/home')
+        }
       } else if (user.role === 'coach' || user.role === 'super_admin') {
         router.replace('/(coach)/dashboard')
       } else {

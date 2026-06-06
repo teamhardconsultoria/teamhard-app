@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Image, ActivityIndicator, Alert,
+  KeyboardAvoidingView, Image, ActivityIndicator, Alert, Modal,
+  Pressable, Linking, Platform,
 } from 'react-native'
 import { useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Audio } from 'expo-av'
 import * as DocumentPicker from 'expo-document-picker'
+import * as ImagePicker from 'expo-image-picker'
 import * as FileSystem from 'expo-file-system/legacy'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/auth'
@@ -31,6 +33,7 @@ export default function ChatScreen() {
   const [supportUserId, setSupportUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [showAttachMenu, setShowAttachMenu] = useState(false)
   const flatListRef = useRef<FlatList>(null)
   const [text, setText] = useState('')
 
@@ -112,38 +115,62 @@ export default function ChatScreen() {
     setSending(false)
   }
 
-  const sendFile = async () => {
+  const uploadAndSend = async (uri: string, mimeType: string, name: string) => {
     if (!partnerId) return
-    const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true })
-    if (result.canceled) return
-    const asset = result.assets[0]
-    if (asset.size && asset.size > 3 * 1024 * 1024) {
-      Alert.alert('Arquivo muito grande', 'O limite é de 3MB.')
-      return
-    }
-    const mimeType = asset.mimeType || 'application/octet-stream'
     const isImage = mimeType.startsWith('image/')
-    const ext = asset.name?.split('.').pop() || (isImage ? 'jpg' : 'bin')
+    const ext = name.split('.').pop() || (isImage ? 'jpg' : 'bin')
     const filename = `chat/${user!.id}/${Date.now()}.${ext}`
     try {
       const cacheUri = `${FileSystem.cacheDirectory}chat_upload_${Date.now()}.${ext}`
-      await FileSystem.copyAsync({ from: asset.uri, to: cacheUri })
-      const base64 = await FileSystem.readAsStringAsync(cacheUri, { encoding: FileSystem.EncodingType.Base64 })
+      await FileSystem.copyAsync({ from: uri, to: cacheUri })
+      const base64 = await FileSystem.readAsStringAsync(cacheUri, { encoding: 'base64' as any })
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
       const { error: uploadError } = await supabase.storage.from('chat-media').upload(filename, bytes, { contentType: mimeType })
       if (uploadError) { Alert.alert('Erro no upload', uploadError.message); return }
       const { data: { publicUrl } } = supabase.storage.from('chat-media').getPublicUrl(filename)
-      const msgType = isImage ? 'photo' : 'file'
-      const msgContent = isImage ? '' : (asset.name || 'Arquivo')
       const { data: inserted, error } = await supabase.from('messages')
-        .insert({ sender_id: user!.id, receiver_id: partnerId, content: msgContent, type: msgType, file_url: publicUrl })
+        .insert({ sender_id: user!.id, receiver_id: partnerId, content: isImage ? '' : name, type: isImage ? 'photo' : 'file', file_url: publicUrl })
         .select('id, sender_id, content, type, file_url, read_at, created_at').single()
       if (error) { Alert.alert('Erro ao enviar', error.message); return }
       if (inserted) setMessages(prev => [...prev, inserted])
       supabase.functions.invoke('send-push-notification', {
-        body: { user_id: partnerId, title: user!.name || 'Aluno', body: isImage ? '📷 Foto' : `📎 ${asset.name || 'Arquivo'}`, data: { screen: mode === 'coach' ? '/(coach)/chat' : '/(admin)/support' }, channel_id: 'messages' },
+        body: { user_id: partnerId, title: user!.name || 'Aluno', body: isImage ? '📷 Foto' : `📎 ${name}`, data: { screen: mode === 'coach' ? '/(coach)/chat' : '/(admin)/support' }, channel_id: 'messages' },
       })
     } catch (e: any) { Alert.alert('Erro', e.message) }
+  }
+
+  const pickFromGallery = async () => {
+    setShowAttachMenu(false)
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') { Alert.alert('Permissão necessária', 'Permita o acesso à galeria nas configurações.'); return }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.8 })
+    if (result.canceled || !result.assets[0]) return
+    const asset = result.assets[0]
+    const mimeType = asset.mimeType || 'image/jpeg'
+    const name = asset.fileName || `foto_${Date.now()}.jpg`
+    await uploadAndSend(asset.uri, mimeType, name)
+  }
+
+  const pickFromCamera = async () => {
+    setShowAttachMenu(false)
+    const { status } = await ImagePicker.requestCameraPermissionsAsync()
+    if (status !== 'granted') { Alert.alert('Permissão necessária', 'Permita o acesso à câmera nas configurações.'); return }
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.8 })
+    if (result.canceled || !result.assets[0]) return
+    const asset = result.assets[0]
+    const mimeType = asset.mimeType || 'image/jpeg'
+    const name = asset.fileName || `foto_${Date.now()}.jpg`
+    await uploadAndSend(asset.uri, mimeType, name)
+  }
+
+  const pickFile = async () => {
+    setShowAttachMenu(false)
+    const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true })
+    if (result.canceled) return
+    const asset = result.assets[0]
+    if (asset.size && asset.size > 3 * 1024 * 1024) { Alert.alert('Arquivo muito grande', 'O limite é de 3MB.'); return }
+    const mimeType = asset.mimeType || 'application/octet-stream'
+    await uploadAndSend(asset.uri, mimeType, asset.name || 'arquivo')
   }
 
   const startRecording = async () => {
@@ -176,7 +203,7 @@ export default function ChatScreen() {
     if (!uri) return
     const filename = `chat/${user!.id}/${Date.now()}.m4a`
     try {
-      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 })
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' as any })
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
       const { error: uploadError } = await supabase.storage.from('chat-media').upload(filename, bytes, { contentType: 'audio/m4a' })
       if (uploadError) { Alert.alert('Erro no upload', uploadError.message); return }
@@ -219,7 +246,8 @@ export default function ChatScreen() {
   if (loading) return <View style={styles.center}><ActivityIndicator color={colors.yellow} /></View>
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior="padding">
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{partnerName.charAt(0)}</Text>
@@ -251,6 +279,7 @@ export default function ChatScreen() {
         showsVerticalScrollIndicator={false}
       />
 
+      {/* Input */}
       <View style={styles.inputWrap}>
         {recording ? (
           <>
@@ -268,8 +297,8 @@ export default function ChatScreen() {
           </>
         ) : (
           <>
-            <TouchableOpacity style={styles.attachBtn} onPress={sendFile}>
-              <Ionicons name="attach" size={22} color={colors.subtext} />
+            <TouchableOpacity style={styles.attachBtn} onPress={() => setShowAttachMenu(true)}>
+              <Ionicons name="attach" size={22} color={showAttachMenu ? colors.yellow : colors.subtext} />
             </TouchableOpacity>
             <TextInput
               style={styles.input}
@@ -296,7 +325,50 @@ export default function ChatScreen() {
           </>
         )}
       </View>
+
+      {/* Bottom sheet de anexo */}
+      <Modal visible={showAttachMenu} transparent animationType="slide" onRequestClose={() => setShowAttachMenu(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowAttachMenu(false)}>
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetHandle} />
+
+            <AttachOption
+              icon="camera"
+              label="Câmera"
+              sub="Tirar uma foto agora"
+              onPress={pickFromCamera}
+            />
+            <AttachOption
+              icon="images"
+              label="Galeria"
+              sub="Escolher foto ou vídeo"
+              onPress={pickFromGallery}
+            />
+            <AttachOption
+              icon="document-attach"
+              label="Arquivo"
+              sub="PDF, doc, zip e outros…"
+              onPress={pickFile}
+            />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </KeyboardAvoidingView>
+  )
+}
+
+function AttachOption({ icon, label, sub, onPress }: { icon: any; label: string; sub: string; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.attachOption} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.attachIconWrap}>
+        <Ionicons name={icon} size={22} color={colors.yellow} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.attachLabel}>{label}</Text>
+        <Text style={styles.attachSub}>{sub}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={colors.subtext} />
+    </TouchableOpacity>
   )
 }
 
@@ -420,4 +492,27 @@ const styles = StyleSheet.create({
   recDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF4444' },
   recTime: { fontSize: 15, fontWeight: '700', color: '#FF4444' },
   recLabel: { fontSize: 13, color: colors.subtext },
+  // Bottom sheet
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: colors.card,
+    borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    paddingBottom: 32,
+  },
+  sheetHandle: {
+    width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border,
+    alignSelf: 'center', marginTop: 12, marginBottom: 8,
+  },
+  attachOption: {
+    flexDirection: 'row', alignItems: 'center', gap: 16,
+    paddingHorizontal: 24, paddingVertical: 16,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  attachIconWrap: {
+    width: 44, height: 44, borderRadius: 12,
+    backgroundColor: 'rgba(232,255,0,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  attachLabel: { fontSize: 15, fontWeight: '700', color: colors.text },
+  attachSub: { fontSize: 12, color: colors.subtext, marginTop: 2 },
 })

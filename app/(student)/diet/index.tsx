@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput,
 } from 'react-native'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/auth'
@@ -22,17 +22,40 @@ export default function DietScreen() {
   const [checks, setChecks] = useState<Record<string, boolean>>({})
   const [mealNotes, setMealNotes] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
+  const [finalizing, setFinalizing] = useState(false)
+  const [finalized, setFinalized] = useState(false)
+  const [studentId, setStudentId] = useState<string | null>(null)
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0])
 
   const today = new Date().toISOString().split('T')[0]
-  const todayWeekday = new Date().getDay()
+  const isToday = selectedDate === today
 
+  const dateLabel = isToday
+    ? 'Hoje'
+    : new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+
+  const shiftDate = (days: number) => {
+    const d = new Date(selectedDate + 'T12:00:00')
+    d.setDate(d.getDate() + days)
+    const next = d.toISOString().split('T')[0]
+    if (next > today) return
+    setSelectedDate(next)
+  }
+
+  useFocusEffect(useCallback(() => {
+    fetchDiet(today)
+  }, []))
+
+  const [didInitialLoad, setDidInitialLoad] = useState(false)
   useEffect(() => {
-    fetchDiet()
-  }, [])
+    if (!didInitialLoad || !studentId || !currentDay) return
+    fetchLog(studentId, currentDay.id, selectedDate)
+  }, [selectedDate])
 
-  const fetchDiet = async () => {
+  const fetchDiet = async (date: string) => {
     const { data: student } = await supabase.from('students').select('id').eq('user_id', user!.id).single()
     if (!student) { setLoading(false); return }
+    setStudentId(student.id)
 
     const { data } = await supabase
       .from('diets')
@@ -48,32 +71,34 @@ export default function DietScreen() {
       `)
       .eq('student_id', student.id)
       .eq('active', true)
-      .lte('valid_from', today)
-      .gte('valid_to', today)
+      .order('valid_from', { ascending: false })
+      .limit(1)
       .maybeSingle()
 
     if (data) {
       setDiet(data)
       // Seleciona o dia mais relevante para hoje
+      const todayWeekday = new Date().getDay()
       const todayDay = data.days?.find((d: DietDay) => d.weekday?.includes(todayWeekday))
       const dayToShow = todayDay || data.days?.[0]
       setCurrentDay(dayToShow)
 
-      if (dayToShow) await fetchLog(student.id, dayToShow.id)
+      if (dayToShow) await fetchLog(student.id, dayToShow.id, date)
     }
     setLoading(false)
+    setDidInitialLoad(true)
   }
 
-  const fetchLog = async (studentId: string, dayId: string) => {
+  const fetchLog = async (studentId: string, dayId: string, date: string = today) => {
     let { data: log } = await supabase
       .from('diet_logs')
       .select('*')
       .eq('student_id', studentId)
       .eq('diet_day_id', dayId)
-      .eq('date', today)
+      .eq('date', date)
       .maybeSingle()
 
-    if (!log) {
+    if (!log && date === today) {
       const { data: newLog } = await supabase
         .from('diet_logs')
         .insert({ student_id: studentId, diet_day_id: dayId, date: today })
@@ -82,9 +107,18 @@ export default function DietScreen() {
       log = newLog
     }
 
+    if (!log) {
+      setDietLog(null)
+      setChecks({})
+      setMealNotes({})
+      setFinalized(false)
+      return
+    }
+
     if (log) {
       setDietLog(log)
       setMealNotes(log.meal_notes || {})
+      setFinalized(!!log.finalized_at)
 
       const { data: foodChecks } = await supabase
         .from('food_checks')
@@ -98,7 +132,7 @@ export default function DietScreen() {
   }
 
   const toggleCheck = async (foodId: string) => {
-    if (!dietLog) return
+    if (!dietLog || !isToday) return
     const newVal = !checks[foodId]
     setChecks(prev => ({ ...prev, [foodId]: newVal }))
 
@@ -129,6 +163,17 @@ export default function DietScreen() {
     const updated = { ...mealNotes, [mealId]: note }
     setMealNotes(updated)
     await supabase.from('diet_logs').update({ meal_notes: updated }).eq('id', dietLog.id)
+  }
+
+  const handleFinalize = async () => {
+    if (!dietLog || finalized) return
+    setFinalizing(true)
+    await supabase.from('diet_logs').update({
+      meal_notes: mealNotes,
+      finalized_at: new Date().toISOString(),
+    }).eq('id', dietLog.id)
+    setFinalized(true)
+    setFinalizing(false)
   }
 
   // Cálculo de macros do dia
@@ -167,7 +212,26 @@ export default function DietScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>{diet.name}</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>{diet.name}</Text>
+          <View style={styles.dateNav}>
+            <TouchableOpacity onPress={() => shiftDate(-1)} style={styles.dateNavBtn}>
+              <Ionicons name="chevron-back" size={18} color={colors.text} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setSelectedDate(today)}>
+              <Text style={styles.dateNavText}>{dateLabel}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => shiftDate(1)} disabled={isToday} style={styles.dateNavBtn}>
+              <Ionicons name="chevron-forward" size={18} color={isToday ? colors.border : colors.text} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        {!isToday && (
+          <View style={styles.readonlyBanner}>
+            <Ionicons name="eye-outline" size={13} color={colors.subtext} />
+            <Text style={styles.readonlyText}>Visualização somente leitura</Text>
+          </View>
+        )}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dayTabs}>
           {diet.days?.map(day => (
             <TouchableOpacity
@@ -175,7 +239,7 @@ export default function DietScreen() {
               style={[styles.dayTab, currentDay.id === day.id && styles.dayTabActive]}
               onPress={() => {
                 setCurrentDay(day)
-                if (dietLog?.diet_day_id !== day.id) fetchLog(dietLog?.student_id || '', day.id)
+                if (dietLog?.diet_day_id !== day.id) fetchLog(studentId || '', day.id, selectedDate)
               }}
             >
               <Text style={[styles.dayTabText, currentDay.id === day.id && styles.dayTabTextActive]}>
@@ -189,8 +253,14 @@ export default function DietScreen() {
       {/* Barra de calorias */}
       <View style={styles.caloriesBar}>
         <View style={styles.caloriesInfo}>
-          <Text style={styles.caloriesValue}>{totals.cal} kcal</Text>
-          {totalGoal > 0 && <Text style={styles.caloriesGoal}>/ {totalGoal} kcal</Text>}
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
+            <Text style={styles.caloriesValue}>{totals.cal} kcal</Text>
+            {totalGoal > 0 && <Text style={styles.caloriesGoal}>/ {totalGoal} kcal</Text>}
+          </View>
+          <TouchableOpacity onPress={() => router.push('/(student)/diet/summary')} style={styles.summaryBtn}>
+            <Text style={styles.summaryBtnText}>Resumo</Text>
+            <Ionicons name="chevron-forward" size={12} color={colors.yellow} />
+          </TouchableOpacity>
         </View>
         <View style={styles.caloriesProgress}>
           <View style={[styles.caloriesProgressFill, { width: `${calPct * 100}%` }]} />
@@ -251,6 +321,27 @@ export default function DietScreen() {
             />
           </View>
         ))}
+
+        {isToday && (
+          finalized ? (
+            <View style={styles.finalizedBadge}>
+              <Ionicons name="checkmark-circle" size={22} color="#00C853" />
+              <Text style={styles.finalizedText}>Dia finalizado!</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.finalizeBtn, finalizing && { opacity: 0.6 }]}
+              onPress={handleFinalize}
+              disabled={finalizing}
+              activeOpacity={0.85}
+            >
+              {finalizing
+                ? <ActivityIndicator size="small" color="#0A0A0A" />
+                : <><Ionicons name="checkmark-done" size={20} color="#0A0A0A" /><Text style={styles.finalizeBtnText}>FINALIZAR DIA</Text></>
+              }
+            </TouchableOpacity>
+          )
+        )}
       </ScrollView>
     </View>
   )
@@ -271,8 +362,14 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: colors.dark },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
   emptyText: { fontSize: 14, color: colors.subtext },
-  header: { paddingTop: 60, paddingBottom: 8, gap: 16 },
-  title: { fontSize: 22, fontWeight: '900', color: colors.text, paddingHorizontal: 24 },
+  header: { paddingTop: 60, paddingBottom: 8, gap: 10 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24 },
+  title: { fontSize: 22, fontWeight: '900', color: colors.text },
+  dateNav: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  dateNavBtn: { padding: 4 },
+  dateNavText: { fontSize: 13, fontWeight: '700', color: colors.yellow, minWidth: 52, textAlign: 'center' },
+  readonlyBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 24 },
+  readonlyText: { fontSize: 12, color: colors.subtext, fontStyle: 'italic' },
   dayTabs: { paddingHorizontal: 24 },
   dayTab: {
     paddingHorizontal: 14,
@@ -296,7 +393,9 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 10,
   },
-  caloriesInfo: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+  caloriesInfo: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  summaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 8, backgroundColor: `${colors.yellow}10` },
+  summaryBtnText: { fontSize: 12, fontWeight: '700', color: colors.yellow },
   caloriesValue: { fontSize: 24, fontWeight: '900', color: colors.text },
   caloriesGoal: { fontSize: 14, color: colors.subtext },
   caloriesProgress: { height: 6, backgroundColor: colors.border, borderRadius: 3 },
@@ -357,4 +456,28 @@ const styles = StyleSheet.create({
     color: colors.subtext,
     fontStyle: 'italic',
   },
+  finalizeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: colors.yellow,
+    borderRadius: 14,
+    paddingVertical: 16,
+    marginTop: 8,
+  },
+  finalizeBtnText: { fontSize: 15, fontWeight: '900', color: '#0A0A0A', letterSpacing: 1.5 },
+  finalizedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(0,200,83,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,200,83,0.25)',
+    borderRadius: 14,
+    paddingVertical: 16,
+    marginTop: 8,
+  },
+  finalizedText: { fontSize: 15, fontWeight: '700', color: '#00C853' },
 })

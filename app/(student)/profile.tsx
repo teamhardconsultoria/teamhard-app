@@ -69,20 +69,23 @@ export default function ProfileScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.7,
+      base64: true,
     })
 
     if (result.canceled || !result.assets[0]) return
+    const asset = result.assets[0]
+    if (!asset.base64) { Alert.alert('Erro', 'Não foi possível ler a imagem.'); return }
 
     setUploading(true)
     try {
-      const uri = result.assets[0].uri
-      const response = await fetch(uri)
-      const blob = await response.blob()
+      const binary = atob(asset.base64)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
 
       const path = `${user!.id}/profile.jpg`
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
+        .upload(path, bytes, { upsert: true, contentType: 'image/jpeg' })
 
       if (uploadError) throw uploadError
 

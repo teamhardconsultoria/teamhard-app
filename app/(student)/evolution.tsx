@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import {
-  View, Text, StyleSheet, ScrollView, ActivityIndicator, Dimensions,
+  View, Text, StyleSheet, ScrollView, ActivityIndicator, Dimensions, TouchableOpacity, Image,
 } from 'react-native'
+import { router } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import Svg, { Path, Line, Circle, Text as SvgText, G } from 'react-native-svg'
 import { supabase } from '@/lib/supabase'
@@ -13,12 +14,22 @@ const CHART_W = SCREEN_W - 48
 const CHART_H = 160
 const PAD = { top: 16, bottom: 28, left: 36, right: 12 }
 
+interface AssessmentPhoto { id: string; angle: string; photo_url: string }
+
 interface AssessmentPoint {
+  id: string
   dateLabel: string
   weight: number
   imc: number
   bodyFat?: number
+  photos: AssessmentPhoto[]
 }
+
+const ANGLE_ORDER = ['front', 'left', 'right', 'back']
+const ANGLE_LABELS: Record<string, string> = {
+  front: 'Frente', left: 'Esq.', right: 'Dir.', back: 'Costas',
+}
+const PHOTO_W = (Dimensions.get('window').width - 48 - 10) / 2
 
 interface SessionPoint {
   month: string
@@ -138,6 +149,7 @@ export default function EvolutionScreen() {
   const [assessments, setAssessments] = useState<AssessmentPoint[]>([])
   const [sessions, setSessions] = useState<SessionPoint[]>([])
   const [studentId, setStudentId] = useState<string | null>(null)
+  const [selectedPhotoIdx, setSelectedPhotoIdx] = useState(0)
 
   useEffect(() => { load() }, [])
 
@@ -149,7 +161,7 @@ export default function EvolutionScreen() {
 
     const [assessRes, sessionRes] = await Promise.all([
       supabase.from('assessments')
-        .select('weight, height, body_fat_pct, created_at')
+        .select('id, weight, height, body_fat_pct, created_at, photos:assessment_photos(id, angle, photo_url)')
         .eq('student_id', student.id)
         .order('created_at', { ascending: true }),
       supabase.from('training_sessions')
@@ -161,13 +173,17 @@ export default function EvolutionScreen() {
     const points: AssessmentPoint[] = (assessRes.data || []).map(a => {
       const h = a.height ? a.height / 100 : null
       return {
+        id: a.id,
         dateLabel: new Date(a.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
         weight: Number(a.weight),
         imc: h ? parseFloat((a.weight / (h * h)).toFixed(1)) : 0,
         bodyFat: a.body_fat_pct != null ? Number(a.body_fat_pct) : undefined,
+        photos: (a.photos as AssessmentPhoto[]) || [],
       }
     })
     setAssessments(points)
+    const lastWithPhotos = [...points].reverse().findIndex(a => a.photos.length > 0)
+    if (lastWithPhotos !== -1) setSelectedPhotoIdx(points.length - 1 - lastWithPhotos)
 
     const byMonth: Record<string, number> = {}
     for (const s of sessionRes.data || []) {
@@ -196,15 +212,21 @@ export default function EvolutionScreen() {
   const hasBodyFat = assessments.some(a => a.bodyFat != null)
   const first = assessments[0]
   const last = assessments[assessments.length - 1]
-  const labels = assessments.map(a => a.dateLabel)
   const totalSessions = sessions.reduce((s, p) => s + p.count, 0)
 
+  const chartAssessments = assessments.slice(-3)
+  const chartLabels = chartAssessments.map(a => a.dateLabel)
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <View style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.back}>
+          <Ionicons name="arrow-back" size={22} color={colors.text} />
+        </TouchableOpacity>
         <Text style={styles.pageTitle}>Evolução</Text>
       </View>
 
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       {!hasData ? (
         <View style={styles.center}>
           <Ionicons name="trending-up-outline" size={40} color={colors.subtext} />
@@ -246,36 +268,36 @@ export default function EvolutionScreen() {
           {/* Peso */}
           <View style={styles.chartCard}>
             <Text style={styles.chartTitle}>Peso (kg)</Text>
-            <Text style={styles.chartSub}>{assessments.length} avaliação{assessments.length !== 1 ? 'ões' : ''}</Text>
+            <Text style={styles.chartSub}>Últimas {chartAssessments.length} avaliação{chartAssessments.length !== 1 ? 'ões' : ''}</Text>
             <LineChartSVG
-              data={assessments.map(a => a.weight)}
+              data={chartAssessments.map(a => a.weight)}
               color={colors.yellow}
-              labels={labels}
+              labels={chartLabels}
             />
           </View>
 
           {/* IMC */}
-          {assessments.some(a => a.imc > 0) && (
+          {chartAssessments.some(a => a.imc > 0) && (
             <View style={styles.chartCard}>
               <Text style={styles.chartTitle}>IMC</Text>
               <Text style={styles.chartSub}>Índice de Massa Corporal</Text>
               <LineChartSVG
-                data={assessments.filter(a => a.imc > 0).map(a => a.imc)}
+                data={chartAssessments.filter(a => a.imc > 0).map(a => a.imc)}
                 color="#60A5FA"
-                labels={assessments.filter(a => a.imc > 0).map(a => a.dateLabel)}
+                labels={chartAssessments.filter(a => a.imc > 0).map(a => a.dateLabel)}
               />
             </View>
           )}
 
           {/* % Gordura */}
-          {hasBodyFat && (
+          {chartAssessments.some(a => a.bodyFat != null) && (
             <View style={styles.chartCard}>
               <Text style={styles.chartTitle}>% Gordura Corporal</Text>
               <Text style={styles.chartSub}>Avaliações com medição</Text>
               <LineChartSVG
-                data={assessments.filter(a => a.bodyFat != null).map(a => a.bodyFat!)}
+                data={chartAssessments.filter(a => a.bodyFat != null).map(a => a.bodyFat!)}
                 color="#F87171"
-                labels={assessments.filter(a => a.bodyFat != null).map(a => a.dateLabel)}
+                labels={chartAssessments.filter(a => a.bodyFat != null).map(a => a.dateLabel)}
               />
             </View>
           )}
@@ -286,22 +308,69 @@ export default function EvolutionScreen() {
             <Text style={styles.chartSub}>Últimos 6 meses</Text>
             <BarChartSVG data={sessions} />
           </View>
+
+          {/* Fotos de Progresso */}
+          {assessments.some(a => a.photos.length > 0) && (() => {
+            const withPhotos = assessments.filter(a => a.photos.length > 0)
+            const selected = withPhotos[selectedPhotoIdx] ?? withPhotos[withPhotos.length - 1]
+            return (
+              <View style={styles.photosCard}>
+                <Text style={styles.chartTitle}>Fotos de Progresso</Text>
+
+                {/* Seletor de data */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.datePicker}>
+                  {withPhotos.map((a, i) => (
+                    <TouchableOpacity
+                      key={a.id}
+                      style={[styles.dateChip, selectedPhotoIdx === i && styles.dateChipActive]}
+                      onPress={() => setSelectedPhotoIdx(i)}
+                    >
+                      <Text style={[styles.dateChipText, selectedPhotoIdx === i && styles.dateChipTextActive]}>
+                        {a.dateLabel}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                {/* Grid de fotos */}
+                <View style={styles.photoGrid}>
+                  {ANGLE_ORDER.map(angle => {
+                    const photo = selected.photos.find(p => p.angle === angle)
+                    return (
+                      <View key={angle} style={styles.photoSlot}>
+                        {photo
+                          ? <Image source={{ uri: photo.photo_url }} style={styles.photoImg} resizeMode="cover" />
+                          : <View style={styles.photoEmpty}>
+                              <Ionicons name="image-outline" size={22} color={colors.border} />
+                            </View>
+                        }
+                        <Text style={styles.photoAngle}>{ANGLE_LABELS[angle]}</Text>
+                      </View>
+                    )
+                  })}
+                </View>
+              </View>
+            )
+          })()}
         </>
       )}
-    </ScrollView>
+      </ScrollView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.dark },
-  content: { paddingBottom: 32 },
+  content: { paddingBottom: 32, flexGrow: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32, paddingTop: 80 },
   empty: { color: colors.text, fontSize: 16, fontWeight: '700', textAlign: 'center' },
   emptySub: { color: colors.subtext, fontSize: 13, textAlign: 'center', lineHeight: 20 },
   header: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
+  back: { padding: 4 },
   pageTitle: { fontSize: 22, fontWeight: '900', color: colors.text },
   summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 16 },
   summaryCard: {
@@ -328,4 +397,27 @@ const styles = StyleSheet.create({
   chartSub: { fontSize: 12, color: colors.subtext, marginBottom: 12 },
   chartEmpty: { height: CHART_H, alignItems: 'center', justifyContent: 'center' },
   chartEmptyText: { color: colors.subtext, fontSize: 13, textAlign: 'center' },
+  photosCard: {
+    marginHorizontal: 16, marginBottom: 16,
+    backgroundColor: colors.card, borderRadius: 16,
+    borderWidth: 1, borderColor: colors.border,
+    padding: 16, gap: 14,
+  },
+  datePicker: { marginBottom: 4 },
+  dateChip: {
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderRadius: 20, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.dark, marginRight: 8,
+  },
+  dateChipActive: { backgroundColor: colors.yellow, borderColor: colors.yellow },
+  dateChipText: { fontSize: 12, fontWeight: '600', color: colors.subtext },
+  dateChipTextActive: { color: '#0A0A0A' },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  photoSlot: { width: PHOTO_W, gap: 6 },
+  photoImg: { width: PHOTO_W, height: PHOTO_W * 1.35, borderRadius: 10 },
+  photoEmpty: {
+    width: PHOTO_W, height: PHOTO_W * 1.35, borderRadius: 10,
+    backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center',
+  },
+  photoAngle: { fontSize: 11, color: colors.subtext, textAlign: 'center' },
 })

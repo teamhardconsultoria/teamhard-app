@@ -15,6 +15,7 @@ export interface User {
   phone?: string
   avatar_url?: string
   first_login: boolean
+  anamnese_completed: boolean
   created_at: string
 }
 

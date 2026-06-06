@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/auth'
 import { colors } from '@/lib/theme'
@@ -8,6 +9,8 @@ import { colors } from '@/lib/theme'
 export default function CoachMobileLayout() {
   const { user } = useAuthStore()
   const [unread, setUnread] = useState(0)
+  const insets = useSafeAreaInsets()
+  const tabBarHeight = 56 + insets.bottom
 
   useEffect(() => {
     fetchUnread()
@@ -39,7 +42,7 @@ export default function CoachMobileLayout() {
   return (
     <Tabs screenOptions={{
       headerShown: false,
-      tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border, height: 64, paddingBottom: 8 },
+      tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border, height: tabBarHeight, paddingBottom: insets.bottom },
       tabBarActiveTintColor: colors.yellow,
       tabBarInactiveTintColor: colors.subtext,
       tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
@@ -52,7 +55,7 @@ export default function CoachMobileLayout() {
         }}
       />
       <Tabs.Screen
-        name="students/index"
+        name="students"
         options={{
           title: 'Alunos',
           tabBarIcon: ({ color, size }) => <Ionicons name="people" size={size} color={color} />,
@@ -67,7 +70,6 @@ export default function CoachMobileLayout() {
           tabBarBadgeStyle: { backgroundColor: colors.yellow, color: '#0A0A0A', fontSize: 9, fontWeight: '800', minWidth: 16, height: 16, lineHeight: 16 },
         }}
       />
-      <Tabs.Screen name="students/[id]" options={{ href: null }} />
     </Tabs>
   )
 }
