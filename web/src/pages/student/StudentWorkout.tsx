@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import { useIsMobile } from '../../hooks/useIsMobile'
 
-interface Exercise { id: string; name: string; sets: number; reps: string; weight?: string; rest_seconds?: number; notes?: string; order?: number }
+interface Exercise { id: string; name: string; sets: number; reps: string; rest_seconds?: number; notes?: string; order?: number }
 interface WorkoutDay { id: string; name: string; sort_order: number; weekday_suggestion?: number[]; exercises: Exercise[] }
 interface Workout { id: string; name: string; valid_from: string; valid_to: string; days: WorkoutDay[] }
 
@@ -27,7 +27,7 @@ export default function StudentWorkout() {
       id, name, valid_from, valid_to,
       days:workout_days(
         id, name, sort_order, weekday_suggestion,
-        exercises:workout_exercises(id, sets, reps, weight, rest_seconds, notes, sort_order, exercise:exercises(name))
+        exercises:workout_exercises(id, sets, reps, rest_seconds, notes:coach_notes, sort_order, exercise:exercises(name))
       )
     `).eq('student_id', student.id).eq('active', true).order('valid_from', { ascending: false }).limit(1).maybeSingle()
     setWorkout(data as any)
@@ -100,7 +100,6 @@ export default function StudentWorkout() {
                           <p style={{ fontSize:14, fontWeight:600, color:'var(--text)', margin:'0 0 4px' }}>{(ex as any).exercise?.name || ex.name}</p>
                           <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
                             <Chip>{ex.sets}x{ex.reps}</Chip>
-                            {ex.weight && <Chip>{ex.weight}</Chip>}
                             {ex.rest_seconds && <Chip>Descanso: {ex.rest_seconds}s</Chip>}
                           </div>
                           {ex.notes && <p style={{ fontSize:12, color:'var(--text-2)', margin:'6px 0 0', fontStyle:'italic' }}>{ex.notes}</p>}

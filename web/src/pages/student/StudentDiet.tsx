@@ -26,9 +26,9 @@ export default function StudentDiet() {
     const { data } = await supabase.from('diets').select(`
       id, name, valid_from, valid_to,
       days:diet_days(
-        id, name, sort_order,
+        id, name:label, sort_order,
         meals:meals(
-          id, name, time, sort_order,
+          id, name, time:suggested_time, sort_order,
           foods:meal_foods(id, name, quantity, unit, calories, protein, carbs, fat, sort_order)
         )
       )
