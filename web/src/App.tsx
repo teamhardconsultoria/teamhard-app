@@ -32,6 +32,9 @@ import Settings from './pages/admin/Settings'
 import StudentLayout from './pages/student/StudentLayout'
 import StudentHome from './pages/student/StudentHome'
 import StudentWorkout from './pages/student/StudentWorkout'
+import StudentWorkoutExecute from './pages/student/StudentWorkoutExecute'
+import StudentWorkoutFeedback from './pages/student/StudentWorkoutFeedback'
+import StudentWorkoutSummary from './pages/student/StudentWorkoutSummary'
 import StudentDiet from './pages/student/StudentDiet'
 import StudentChat from './pages/student/StudentChat'
 import StudentPayments from './pages/student/StudentPayments'
@@ -109,6 +112,9 @@ export default function App() {
         <Route index element={<Navigate to="home" replace />} />
         <Route path="home" element={<StudentHome />} />
         <Route path="workout" element={<StudentWorkout />} />
+        <Route path="workout/execute/:dayId" element={<StudentWorkoutExecute />} />
+        <Route path="workout/feedback/:sessionId" element={<StudentWorkoutFeedback />} />
+        <Route path="workout/summary/:sessionId" element={<StudentWorkoutSummary />} />
         <Route path="diet" element={<StudentDiet />} />
         <Route path="chat" element={<StudentChat />} />
         <Route path="payments" element={<StudentPayments />} />

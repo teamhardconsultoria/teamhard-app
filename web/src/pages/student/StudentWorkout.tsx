@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronRight, Dumbbell } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronDown, ChevronRight, Dumbbell, Play } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -14,6 +15,7 @@ const spin = { width:28, height:28, border:'2px solid #E8FF00', borderTopColor:'
 export default function StudentWorkout() {
   const { user } = useAuthStore()
   const isMobile = useIsMobile()
+  const navigate = useNavigate()
   const [workout, setWorkout] = useState<Workout | null>(null)
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -106,6 +108,10 @@ export default function StudentWorkout() {
                         </div>
                       </div>
                     ))}
+                    <button onClick={() => navigate(`/student/workout/execute/${day.id}`)}
+                      style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, width:'100%', marginTop:4, backgroundColor:'#E8FF00', border:'none', borderRadius:10, padding:'13px', cursor:'pointer', fontSize:14, fontWeight:800, color:'#0A0A0A', letterSpacing:1 }}>
+                      <Play size={16} color="#0A0A0A" fill="#0A0A0A" /> INICIAR TREINO
+                    </button>
                   </div>
                 )}
               </div>
