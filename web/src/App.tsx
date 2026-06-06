@@ -39,6 +39,7 @@ import StudentDiet from './pages/student/StudentDiet'
 import StudentChat from './pages/student/StudentChat'
 import StudentPayments from './pages/student/StudentPayments'
 import StudentProfilePage from './pages/student/StudentProfile'
+import StudentSessions from './pages/student/StudentSessions'
 
 function PrivateRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }) {
   const { user, loading } = useAuthStore()
@@ -118,6 +119,7 @@ export default function App() {
         <Route path="diet" element={<StudentDiet />} />
         <Route path="chat" element={<StudentChat />} />
         <Route path="payments" element={<StudentPayments />} />
+        <Route path="sessions" element={<StudentSessions />} />
         <Route path="profile" element={<StudentProfilePage />} />
       </Route>
 
