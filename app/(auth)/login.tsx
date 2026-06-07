@@ -123,11 +123,11 @@ export default function LoginScreen() {
         {/* CTA */}
         <TouchableOpacity
           style={styles.cta}
-          onPress={() => Linking.openURL('https://teamhardconsultoria.github.io')}
+          onPress={() => Linking.openURL('https://metodoacelera.github.io/site')}
         >
           <Text style={styles.ctaText}>Ainda não é aluno?</Text>
           <Text style={styles.ctaLink}>Entre já para o Método Acelera!</Text>
-          <Text style={styles.ctaUrl}>teamhardconsultoria.github.io</Text>
+          <Text style={styles.ctaUrl}>metodoacelera.github.io/site</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
