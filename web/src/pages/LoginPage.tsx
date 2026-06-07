@@ -121,7 +121,7 @@ export default function LoginPage() {
         <div style={{ marginTop: 40, textAlign: 'center' }}>
           <p style={{ color: 'var(--text-3)', fontSize: 13, margin: '0 0 6px' }}>Ainda não é aluno?</p>
           <a
-            href="https://teamhardconsultoria.github.io"
+            href="https://metodoacelera.github.io/site"
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: 'var(--accent-text)', fontSize: 14, fontWeight: 700, textDecoration: 'none', display: 'block', marginBottom: 4 }}
@@ -129,12 +129,12 @@ export default function LoginPage() {
             Entre já para o Método Acelera!
           </a>
           <a
-            href="https://teamhardconsultoria.github.io"
+            href="https://metodoacelera.github.io/site"
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: 'var(--text-3)', fontSize: 12, textDecoration: 'none' }}
           >
-            teamhardconsultoria.github.io
+            metodoacelera.github.io/site
           </a>
         </div>
 
