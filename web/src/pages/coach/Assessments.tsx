@@ -123,7 +123,9 @@ export default function Assessments() {
       ? new Date(new Date(newestAt).getTime() + 1000).toISOString()
       : new Date().toISOString()
     localStorage.setItem(LS_KEY(student.id), seenTs)
+    localStorage.setItem('coach_assessments_last_seen', seenTs)
     setStudents(prev => prev.map(s => s.id === student.id ? { ...s, hasUnread: false } : s))
+    window.dispatchEvent(new Event('assessment_student_viewed'))
     if (data && data.some((a: any) => !a.read_by_coach)) {
       await supabase.from('assessments').update({ read_by_coach: true }).eq('student_id', student.id).eq('read_by_coach', false)
     }

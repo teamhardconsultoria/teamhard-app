@@ -106,6 +106,22 @@ export default function CoachLayout() {
     return () => { subs.forEach(s => s?.unsubscribe()) }
   }, [])
 
+  // Re-conta avaliações quando coach visualiza um aluno (evento disparado por Assessments.tsx)
+  useEffect(() => {
+    const handler = async () => {
+      const cId = coachIdRef.current
+      if (!cId) return
+      const lastSeen = localStorage.getItem(LS_ASSESSMENTS) || new Date(0).toISOString()
+      const { count } = await supabase.from('assessments')
+        .select('id', { count: 'exact', head: true })
+        .eq('coach_id', cId)
+        .gt('created_at', lastSeen)
+      setNewAssessments(count || 0)
+    }
+    window.addEventListener('assessment_student_viewed', handler)
+    return () => window.removeEventListener('assessment_student_viewed', handler)
+  }, [])
+
   // Zerar badges ao navegar para a página correspondente
   useEffect(() => {
     const path = location.pathname
