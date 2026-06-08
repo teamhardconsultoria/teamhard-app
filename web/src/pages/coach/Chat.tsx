@@ -124,7 +124,7 @@ export default function Chat() {
       .insert({ sender_id: user!.id, receiver_id: selected.studentUserId, content, type: 'text' })
       .select('id, sender_id, content, type, file_url, created_at, read_at').single()
     if (inserted) setMessages(prev => [...prev, inserted])
-    supabase.functions.invoke('send-push-notification', { body: { user_id: selected.studentUserId, title: user?.name || 'Coach', body: content.length > 80 ? content.slice(0, 80) + '…' : content, data: { screen: '/(student)/chat' } } })
+    supabase.functions.invoke('send-push-notification', { body: { user_id: selected.studentUserId, title: user?.name || 'Coach', body: content.length > 80 ? content.slice(0, 80) + '…' : content, data: { screen: '/(student)/chat' }, channel_id: 'messages' } })
     setSending(false)
     loadConversations(coachId, superAdminUserId)
   }
@@ -142,7 +142,7 @@ export default function Chat() {
       .insert({ sender_id: user!.id, receiver_id: selected.studentUserId, content: isImage ? '' : file.name, type: isImage ? 'photo' : 'file', file_url: publicUrl })
       .select('id, sender_id, content, type, file_url, created_at, read_at').single()
     if (inserted) setMessages(prev => [...prev, inserted])
-    supabase.functions.invoke('send-push-notification', { body: { user_id: selected.studentUserId, title: user?.name || 'Coach', body: isImage ? '📷 Foto' : `📎 ${file.name}`, data: { screen: '/(student)/chat' } } })
+    supabase.functions.invoke('send-push-notification', { body: { user_id: selected.studentUserId, title: user?.name || 'Coach', body: isImage ? '📷 Foto' : `📎 ${file.name}`, data: { screen: '/(student)/chat' }, channel_id: 'messages' } })
   }
 
   const startRecording = async () => {
@@ -190,7 +190,7 @@ export default function Chat() {
         .insert({ sender_id: user!.id, receiver_id: selected.studentUserId, content: '', type: 'audio', file_url: publicUrl })
         .select('id, sender_id, content, type, file_url, created_at, read_at').single()
       if (inserted) setMessages(prev => [...prev, inserted])
-      supabase.functions.invoke('send-push-notification', { body: { user_id: selected.studentUserId, title: user?.name || 'Coach', body: '🎵 Áudio', data: { screen: '/(student)/chat' } } })
+      supabase.functions.invoke('send-push-notification', { body: { user_id: selected.studentUserId, title: user?.name || 'Coach', body: '🎵 Áudio', data: { screen: '/(student)/chat' }, channel_id: 'messages' } })
     }
     mr.stream.getTracks().forEach(t => t.stop())
     mr.stop()

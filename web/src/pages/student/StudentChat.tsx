@@ -90,7 +90,7 @@ export default function StudentChat() {
       .insert({ sender_id: user!.id, receiver_id: partnerId, content, type: 'text' })
       .select('id, sender_id, content, type, file_url, created_at, read_at').single()
     if (inserted) setMessages(prev => [...prev, inserted])
-    supabase.functions.invoke('send-push-notification', { body: { user_id: partnerId, title: user!.name || 'Aluno', body: content.length > 80 ? content.slice(0,80)+'…' : content, data: { screen: mode === 'coach' ? '/(coach)/chat' : '/(admin)/support' } } })
+    supabase.functions.invoke('send-push-notification', { body: { user_id: partnerId, title: user!.name || 'Aluno', body: content.length > 80 ? content.slice(0,80)+'…' : content, data: { screen: mode === 'coach' ? '/(coach)/chat' : '/(admin)/support' }, channel_id: 'messages' } })
     setSending(false)
   }
 
@@ -107,7 +107,7 @@ export default function StudentChat() {
       .insert({ sender_id: user!.id, receiver_id: partnerId, content: isImage ? '' : file.name, type: isImage ? 'photo' : 'file', file_url: publicUrl })
       .select('id, sender_id, content, type, file_url, created_at, read_at').single()
     if (inserted) setMessages(prev => [...prev, inserted])
-    supabase.functions.invoke('send-push-notification', { body: { user_id: partnerId, title: user!.name || 'Aluno', body: isImage ? '📷 Foto' : `📎 ${file.name}`, data: { screen: mode === 'coach' ? '/(coach)/chat' : '/(admin)/support' } } })
+    supabase.functions.invoke('send-push-notification', { body: { user_id: partnerId, title: user!.name || 'Aluno', body: isImage ? '📷 Foto' : `📎 ${file.name}`, data: { screen: mode === 'coach' ? '/(coach)/chat' : '/(admin)/support' }, channel_id: 'messages' } })
   }
 
   const startRecording = async () => {
@@ -143,7 +143,7 @@ export default function StudentChat() {
         .insert({ sender_id: user!.id, receiver_id: partnerId, content: '', type: 'audio', file_url: publicUrl })
         .select('id, sender_id, content, type, file_url, created_at, read_at').single()
       if (inserted) setMessages(prev => [...prev, inserted])
-      supabase.functions.invoke('send-push-notification', { body: { user_id: partnerId, title: user!.name || 'Aluno', body: '🎵 Áudio', data: { screen: mode === 'coach' ? '/(coach)/chat' : '/(admin)/support' } } })
+      supabase.functions.invoke('send-push-notification', { body: { user_id: partnerId, title: user!.name || 'Aluno', body: '🎵 Áudio', data: { screen: mode === 'coach' ? '/(coach)/chat' : '/(admin)/support' }, channel_id: 'messages' } })
     }
     mr.stream.getTracks().forEach(t => t.stop()); mr.stop(); mediaRecorderRef.current = null; setIsRecording(false); setRecDuration(0)
   }

@@ -116,7 +116,7 @@ export default function SupportChat() {
       .select('id, sender_id, content, created_at, read_at').single()
     if (inserted) setMessages(prev => [...prev, inserted])
     supabase.functions.invoke('send-push-notification', {
-      body: { user_id: selected.userId, title: 'Suporte TeamHard', body: content.length > 80 ? content.slice(0, 80) + '…' : content, data: { screen: '/(student)/chat' } },
+      body: { user_id: selected.userId, title: 'Suporte TeamHard', body: content.length > 80 ? content.slice(0, 80) + '…' : content, data: { screen: '/(student)/chat' }, channel_id: 'messages' },
     })
     setSending(false)
     loadPartners()
