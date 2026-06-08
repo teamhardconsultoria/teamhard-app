@@ -109,8 +109,6 @@ export default function Assessments() {
   }
 
   const selectStudent = async (student: Student) => {
-    localStorage.setItem(LS_KEY(student.id), new Date().toISOString())
-    setStudents(prev => prev.map(s => s.id === student.id ? { ...s, hasUnread: false } : s))
     setSelected(student); setAssessments([]); setLoadingAssessments(true); setShowCompare(false)
     const { data } = await supabase.from('assessments').select('id, weight, height, body_fat_pct, notes, read_by_coach, created_at').eq('student_id', student.id).order('created_at', { ascending: false })
     const withPhotos = await Promise.all((data || []).map(async (a: any) => {
@@ -119,6 +117,13 @@ export default function Assessments() {
     }))
     setAssessments(withPhotos)
     setLoadingAssessments(false)
+    // Grava o created_at da avaliação mais recente + 1s como "visto"
+    const newestAt = data?.[0]?.created_at
+    const seenTs = newestAt
+      ? new Date(new Date(newestAt).getTime() + 1000).toISOString()
+      : new Date().toISOString()
+    localStorage.setItem(LS_KEY(student.id), seenTs)
+    setStudents(prev => prev.map(s => s.id === student.id ? { ...s, hasUnread: false } : s))
     if (data && data.some((a: any) => !a.read_by_coach)) {
       await supabase.from('assessments').update({ read_by_coach: true }).eq('student_id', student.id).eq('read_by_coach', false)
     }
