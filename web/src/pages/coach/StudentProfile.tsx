@@ -543,9 +543,9 @@ export default function StudentProfile() {
                     <select value={editForm.gym_experience} onChange={e => setEditForm(p => ({ ...p, gym_experience: e.target.value }))}
                       style={{ width: '100%', padding: '10px 12px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 14, outline: 'none' }}>
                       <option value="never">Nunca treinei</option>
-                      <option value="less_1y">Menos de 1 ano</option>
-                      <option value="1_3y">1 a 3 anos</option>
-                      <option value="more_3y">Mais de 3 anos</option>
+                      <option value="less_6mo">Menos de 6 meses</option>
+                      <option value="6mo_2yr">6 meses a 2 anos</option>
+                      <option value="more_2yr">Mais de 2 anos</option>
                     </select>
                   </EditField>
                   <EditField label="Tipo de trabalho">
