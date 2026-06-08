@@ -29,15 +29,17 @@ export default function StudentPayments() {
   const [loading, setLoading] = useState(true)
   const [planStatus, setPlanStatus] = useState<string | null>(null)
   const [planEnd, setPlanEnd] = useState<string | null>(null)
+  const [planType, setPlanType] = useState<string | null>(null)
 
   useEffect(() => { load() }, [])
 
   const load = async () => {
     const { data: student } = await supabase.from('students')
-      .select('id, payment_status, plan_end').eq('user_id', user!.id).single()
+      .select('id, payment_status, plan_end, plan_type').eq('user_id', user!.id).single()
     if (!student) { setLoading(false); return }
     setPlanStatus(student.payment_status)
     setPlanEnd(student.plan_end)
+    setPlanType(student.plan_type)
     const { data } = await supabase.from('payments')
       .select('id, amount, status, payment_method, due_date, paid_at, plan_type, installment_number, total_installments')
       .eq('student_id', student.id)
@@ -81,6 +83,24 @@ export default function StudentPayments() {
                 <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{fmt(planEnd)}</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Banner renovação legado */}
+        {planType === 'legado' && (
+          <div style={{ backgroundColor: 'rgba(232,255,0,0.06)', border: '1px solid rgba(232,255,0,0.25)', borderRadius: 14, padding: '16px 20px', marginBottom: 20 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#E8FF00', margin: '0 0 4px' }}>Renove seu plano</p>
+            <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 14px' }}>
+              Seu plano atual é legado. Para continuar tendo acesso, renove pelo plano Semestral com condições especiais.
+            </p>
+            <a
+              href="https://chk.eduzz.com/60E2QA4DW3"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: 'inline-block', padding: '10px 20px', backgroundColor: '#E8FF00', color: '#0A0A0A', borderRadius: 10, fontSize: 14, fontWeight: 800, textDecoration: 'none' }}
+            >
+              Renovar agora — Semestral
+            </a>
           </div>
         )}
 

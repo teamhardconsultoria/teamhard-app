@@ -36,9 +36,9 @@ const STATUS_LABEL: Record<string, string> = {
   active: 'Ativo', pending: 'Pendente', overdue: 'Em atraso', blocked: 'Bloqueado',
 }
 const PLAN_LABEL: Record<string, string> = {
-  monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual', permuta: 'Permuta',
+  monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual', permuta: 'Permuta', legado: 'Legado',
 }
-const PLAN_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12, permuta: 12 }
+const PLAN_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12, permuta: 12, legado: 6 }
 const PLAN_DEFAULTS: Record<string, number> = { monthly: 397, quarterly: 741 }
 
 function calcPlanEnd(start: string, planType: string): string {
@@ -467,16 +467,19 @@ export default function Students() {
                       <option value="monthly">Mensal — R$397/mês</option>
                       <option value="quarterly">Trimestral — R$247/mês</option>
                       <option value="permuta">Permuta</option>
+                      <option value="legado">Legado</option>
                     </select>
                   </ModalField>
                   <ModalField label="Início">
                     <ModalInput type="date" value={form.plan_start} onChange={v => setForm(p => ({ ...p, plan_start: v }))} />
                   </ModalField>
                 </div>
-                {form.plan_type === 'permuta' ? (
+                {form.plan_type === 'permuta' || form.plan_type === 'legado' ? (
                   <div style={{ backgroundColor: 'rgba(100,160,255,0.06)', border: '1px solid rgba(100,160,255,0.2)', borderRadius: 10, padding: '10px 14px' }}>
                     <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0 }}>
-                      Plano <strong style={{ color: '#64A0FF' }}>Permuta</strong> — sem cobrança. Acesso ativo por 1 ano a partir do início.
+                      {form.plan_type === 'legado'
+                        ? <>Plano <strong style={{ color: '#64A0FF' }}>Legado</strong> — aluno migrado. Sem cobrança automática. Renovação via Eduzz.</>
+                        : <>Plano <strong style={{ color: '#64A0FF' }}>Permuta</strong> — sem cobrança. Acesso ativo por 1 ano a partir do início.</>}
                     </p>
                   </div>
                 ) : (
