@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Scale, ChevronDown, ChevronLeft, ChevronRight, X, ImageOff, SlidersHorizontal, ClipboardPlus, Camera } from 'lucide-react'
+import { Scale, ChevronDown, ChevronLeft, ChevronRight, X, ImageOff, SlidersHorizontal, ClipboardPlus, Camera, Pencil } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 
@@ -37,6 +37,13 @@ export default function Assessments() {
   const [manualError, setManualError] = useState('')
   const [manualPhotos, setManualPhotos] = useState<Record<PhotoAngle, File | null>>({ front: null, back: null, left: null, right: null })
   const [manualPreviews, setManualPreviews] = useState<Record<string, string>>({})
+
+  const [editAssessment, setEditAssessment] = useState<Assessment | null>(null)
+  const [editForm, setEditForm] = useState({ weight: '', height: '', body_fat_pct: '', notes: '' })
+  const [editPhotos, setEditPhotos] = useState<Record<PhotoAngle, File | null>>({ front: null, back: null, left: null, right: null })
+  const [editPreviews, setEditPreviews] = useState<Record<string, string>>({})
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState('')
 
   useEffect(() => { init() }, [])
 
@@ -97,6 +104,58 @@ export default function Assessments() {
     if (manualPreviews[angle]) URL.revokeObjectURL(manualPreviews[angle])
     setManualPhotos(p => ({ ...p, [angle]: file }))
     setManualPreviews(p => ({ ...p, [angle]: file ? URL.createObjectURL(file) : '' }))
+  }
+
+  const openEdit = (a: Assessment) => {
+    setEditAssessment(a)
+    setEditForm({ weight: String(a.weight), height: String(a.height), body_fat_pct: a.body_fat_pct != null ? String(a.body_fat_pct) : '', notes: a.notes || '' })
+    setEditPhotos({ front: null, back: null, left: null, right: null })
+    setEditPreviews({})
+    setEditError('')
+  }
+
+  const closeEdit = () => {
+    Object.values(editPreviews).forEach(url => url && URL.revokeObjectURL(url))
+    setEditPreviews({})
+    setEditPhotos({ front: null, back: null, left: null, right: null })
+    setEditAssessment(null)
+    setEditSaving(false)
+  }
+
+  const setEditPhoto = (angle: PhotoAngle, file: File | null) => {
+    if (editPreviews[angle]) URL.revokeObjectURL(editPreviews[angle])
+    setEditPhotos(p => ({ ...p, [angle]: file }))
+    setEditPreviews(p => ({ ...p, [angle]: file ? URL.createObjectURL(file) : '' }))
+  }
+
+  const saveEdit = async () => {
+    if (!editAssessment || !editForm.weight) { setEditError('Peso é obrigatório.'); return }
+    setEditSaving(true); setEditError('')
+    const { error } = await supabase.from('assessments').update({
+      weight: parseFloat(editForm.weight),
+      height: editForm.height ? parseFloat(editForm.height) : null,
+      body_fat_pct: editForm.body_fat_pct ? parseFloat(editForm.body_fat_pct) : null,
+      notes: editForm.notes || null,
+    }).eq('id', editAssessment.id)
+    if (error) { setEditError(error.message); setEditSaving(false); return }
+
+    for (const { key } of PHOTO_ANGLES) {
+      const file = editPhotos[key]
+      if (!file) continue
+      const path = `assessments/${selected!.id}/${editAssessment.id}/${key}.jpg`
+      const { error: upErr } = await supabase.storage.from('assessment-photos').upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true })
+      if (upErr) continue
+      const { data: { publicUrl } } = supabase.storage.from('assessment-photos').getPublicUrl(path)
+      const existing = editAssessment.photos.find(p => p.angle === key)
+      if (existing) {
+        await supabase.from('assessment_photos').update({ photo_url: publicUrl }).eq('id', existing.id)
+      } else {
+        await supabase.from('assessment_photos').insert({ assessment_id: editAssessment.id, angle: key, photo_url: publicUrl })
+      }
+    }
+
+    closeEdit()
+    if (selected) selectStudent(selected)
   }
 
   const saveManual = async () => {
@@ -195,7 +254,8 @@ export default function Assessments() {
               </div>
             ) : assessments.map((a, idx) => (
               <AssessmentCard key={a.id} assessment={a} index={assessments.length - idx} prev={assessments[idx + 1]}
-                formatDate={formatDate} imc={imc} onPhotoClick={(photos, i) => setLightbox({ photos, index: i })} />
+                formatDate={formatDate} imc={imc} onPhotoClick={(photos, i) => setLightbox({ photos, index: i })}
+                onEdit={() => openEdit(a)} />
             ))}
           </div>
         </div>
@@ -275,6 +335,82 @@ export default function Assessments() {
                 <button onClick={saveManual} disabled={manualSaving}
                   style={{ flex: 2, padding: '10px 0', backgroundColor: manualSaving ? 'var(--border)' : '#E8FF00', color: manualSaving ? 'var(--text-2)' : '#0A0A0A', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: manualSaving ? 'not-allowed' : 'pointer' }}>
                   {manualSaving ? 'Salvando…' : 'Salvar avaliação'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: editar avaliação */}
+      {editAssessment && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+          <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, backgroundColor: 'var(--surface)', zIndex: 1 }}>
+              <div>
+                <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--text)', margin: 0 }}>Editar avaliação</p>
+                <p style={{ fontSize: 12, color: 'var(--text-2)', margin: '3px 0 0 0' }}>{selected?.name} · {formatDate(editAssessment.created_at)}</p>
+              </div>
+              <button onClick={closeEdit} style={{ background: 'none', border: 'none', color: 'var(--text-2)', cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <ManualField label="Peso (kg) *">
+                  <input type="number" value={editForm.weight} placeholder="Ex: 72.5" step="0.1" min="30" max="300"
+                    onChange={e => setEditForm(p => ({ ...p, weight: e.target.value }))}
+                    style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
+                </ManualField>
+                <ManualField label="Altura (cm)">
+                  <input type="number" value={editForm.height} placeholder="Ex: 175" step="1" min="100" max="250"
+                    onChange={e => setEditForm(p => ({ ...p, height: e.target.value }))}
+                    style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
+                </ManualField>
+              </div>
+              <ManualField label="% Gordura corporal">
+                <input type="number" value={editForm.body_fat_pct} placeholder="Ex: 18.5" step="0.1" min="1" max="60"
+                  onChange={e => setEditForm(p => ({ ...p, body_fat_pct: e.target.value }))}
+                  style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
+              </ManualField>
+              <ManualField label="Observações">
+                <textarea value={editForm.notes} placeholder="Medidas, notas do coach, contexto…" rows={3}
+                  onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))}
+                  style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+                  onFocus={focusStyle} onBlur={blurStyle} />
+              </ManualField>
+              <ManualField label="Fotos — clique para substituir ou adicionar">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                  {PHOTO_ANGLES.map(({ key, label }) => {
+                    const newPreview = editPreviews[key]
+                    const existing = editAssessment.photos.find(p => p.angle === key)
+                    const src = newPreview || existing?.photo_url || ''
+                    return (
+                      <label key={key} style={{ cursor: 'pointer', display: 'block', position: 'relative' }}>
+                        <input type="file" accept="image/*" style={{ display: 'none' }}
+                          onChange={e => setEditPhoto(key, e.target.files?.[0] ?? null)} />
+                        <div style={{ aspectRatio: '3/4', borderRadius: 8, overflow: 'hidden', backgroundColor: 'var(--bg)', border: `1px solid ${newPreview ? 'rgba(232,255,0,0.5)' : existing ? 'rgba(0,200,83,0.35)' : 'var(--border)'}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                          {src
+                            ? <img src={src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            : <><Camera size={16} color="#555" /><p style={{ fontSize: 9, color: '#555', margin: '4px 0 0', textAlign: 'center' }}>{label}</p></>}
+                          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.55)', padding: '2px 0', textAlign: 'center' }}>
+                            <span style={{ fontSize: 9, color: newPreview ? '#E8FF00' : existing ? '#00C853' : '#888' }}>
+                              {newPreview ? 'Nova' : existing ? '✓' : label}
+                            </span>
+                          </div>
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+              </ManualField>
+              {editError && <p style={{ color: '#FF4444', fontSize: 13, margin: 0 }}>{editError}</p>}
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <button onClick={closeEdit}
+                  style={{ flex: 1, padding: '10px 0', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text-2)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                  Cancelar
+                </button>
+                <button onClick={saveEdit} disabled={editSaving}
+                  style={{ flex: 2, padding: '10px 0', backgroundColor: editSaving ? 'var(--border)' : '#E8FF00', color: editSaving ? 'var(--text-2)' : '#0A0A0A', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: editSaving ? 'not-allowed' : 'pointer' }}>
+                  {editSaving ? 'Salvando…' : 'Salvar alterações'}
                 </button>
               </div>
             </div>
@@ -556,10 +692,11 @@ function MetricRow({ label, value, diff }: { label: string; value: string; diff?
 
 // ─── Existing sub-components ────────────────────────────────────
 
-function AssessmentCard({ assessment, index, prev, formatDate, imc, onPhotoClick }: {
+function AssessmentCard({ assessment, index, prev, formatDate, imc, onPhotoClick, onEdit }: {
   assessment: Assessment; index: number; prev?: Assessment
   formatDate: (s: string) => string; imc: (w: number, h: number) => string
   onPhotoClick: (photos: AssessmentPhoto[], i: number) => void
+  onEdit: () => void
 }) {
   const [open, setOpen] = useState(index === 1)
   const weightDiff = prev ? assessment.weight - prev.weight : null
@@ -579,7 +716,15 @@ function AssessmentCard({ assessment, index, prev, formatDate, imc, onPhotoClick
             {assessment.body_fat_pct != null && <Metric label="% Gord." value={`${assessment.body_fat_pct}%`} />}
           </div>
         </div>
-        <ChevronDown size={16} color="#888" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={e => { e.stopPropagation(); onEdit() }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, border: '1px solid var(--border)', backgroundColor: 'transparent', color: 'var(--text-2)', cursor: 'pointer' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--surface-hover)'; (e.currentTarget as HTMLElement).style.color = 'var(--text)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--text-2)' }}>
+            <Pencil size={13} />
+          </button>
+          <ChevronDown size={16} color="#888" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+        </div>
       </button>
 
       {open && (
