@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Scale, ChevronDown, ChevronLeft, ChevronRight, X, ImageOff, SlidersHorizontal, ClipboardPlus } from 'lucide-react'
+import { Scale, ChevronDown, ChevronLeft, ChevronRight, X, ImageOff, SlidersHorizontal, ClipboardPlus, Camera } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 
@@ -15,6 +15,11 @@ const ANGLE_ORDER = ['front', 'back', 'left', 'right']
 const spin = { width: 24, height: 24, border: '2px solid #E8FF00', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }
 
 interface ManualForm { date: string; weight: string; height: string; body_fat_pct: string; notes: string }
+type PhotoAngle = 'front' | 'back' | 'left' | 'right'
+const PHOTO_ANGLES: { key: PhotoAngle; label: string }[] = [
+  { key: 'front', label: 'Frente' }, { key: 'back', label: 'Costas' },
+  { key: 'left', label: 'Esquerda' }, { key: 'right', label: 'Direita' },
+]
 
 export default function Assessments() {
   const { user } = useAuthStore()
@@ -30,6 +35,8 @@ export default function Assessments() {
   const [manualForm, setManualForm] = useState<ManualForm>({ date: '', weight: '', height: '', body_fat_pct: '', notes: '' })
   const [manualSaving, setManualSaving] = useState(false)
   const [manualError, setManualError] = useState('')
+  const [manualPhotos, setManualPhotos] = useState<Record<PhotoAngle, File | null>>({ front: null, back: null, left: null, right: null })
+  const [manualPreviews, setManualPreviews] = useState<Record<string, string>>({})
 
   useEffect(() => { init() }, [])
 
@@ -72,15 +79,31 @@ export default function Assessments() {
 
   const openManual = () => {
     setManualForm({ date: new Date().toISOString().split('T')[0], weight: '', height: '', body_fat_pct: '', notes: '' })
+    setManualPhotos({ front: null, back: null, left: null, right: null })
+    setManualPreviews({})
     setManualError('')
     setShowManual(true)
+  }
+
+  const closeManual = () => {
+    Object.values(manualPreviews).forEach(url => url && URL.revokeObjectURL(url))
+    setManualPreviews({})
+    setManualPhotos({ front: null, back: null, left: null, right: null })
+    setShowManual(false)
+    setManualSaving(false)
+  }
+
+  const setPhoto = (angle: PhotoAngle, file: File | null) => {
+    if (manualPreviews[angle]) URL.revokeObjectURL(manualPreviews[angle])
+    setManualPhotos(p => ({ ...p, [angle]: file }))
+    setManualPreviews(p => ({ ...p, [angle]: file ? URL.createObjectURL(file) : '' }))
   }
 
   const saveManual = async () => {
     if (!selected || !manualForm.date || !manualForm.weight) { setManualError('Data e peso são obrigatórios.'); return }
     setManualSaving(true)
     setManualError('')
-    const { error } = await supabase.from('assessments').insert({
+    const { data: assessment, error } = await supabase.from('assessments').insert({
       student_id: selected.id,
       coach_id: coachId,
       weight: parseFloat(manualForm.weight),
@@ -89,10 +112,20 @@ export default function Assessments() {
       notes: manualForm.notes || null,
       read_by_coach: true,
       created_at: manualForm.date + 'T12:00:00',
-    })
+    }).select('id').single()
     if (error) { setManualError(error.message); setManualSaving(false); return }
-    setShowManual(false)
-    setManualSaving(false)
+
+    for (const { key } of PHOTO_ANGLES) {
+      const file = manualPhotos[key]
+      if (!file) continue
+      const path = `assessments/${selected.id}/${assessment.id}/${key}.jpg`
+      const { error: upErr } = await supabase.storage.from('assessment-photos').upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true })
+      if (upErr) continue
+      const { data: { publicUrl } } = supabase.storage.from('assessment-photos').getPublicUrl(path)
+      await supabase.from('assessment_photos').insert({ assessment_id: assessment.id, angle: key, photo_url: publicUrl })
+    }
+
+    closeManual()
     selectStudent(selected)
   }
 
@@ -181,7 +214,7 @@ export default function Assessments() {
                 <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--text)', margin: 0 }}>Registrar avaliação histórica</p>
                 <p style={{ fontSize: 12, color: 'var(--text-2)', margin: '3px 0 0 0' }}>{selected?.name}</p>
               </div>
-              <button onClick={() => setShowManual(false)} style={{ background: 'none', border: 'none', color: 'var(--text-2)', cursor: 'pointer' }}><X size={20} /></button>
+              <button onClick={closeManual} style={{ background: 'none', border: 'none', color: 'var(--text-2)', cursor: 'pointer' }}><X size={20} /></button>
             </div>
             <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
               <ManualField label="Data da avaliação *">
@@ -212,9 +245,30 @@ export default function Assessments() {
                   style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
                   onFocus={focusStyle} onBlur={blurStyle} />
               </ManualField>
+              <ManualField label="Fotos (opcional)">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                  {PHOTO_ANGLES.map(({ key, label }) => {
+                    const preview = manualPreviews[key]
+                    return (
+                      <label key={key} style={{ cursor: 'pointer', display: 'block' }}>
+                        <input type="file" accept="image/*" style={{ display: 'none' }}
+                          onChange={e => setPhoto(key, e.target.files?.[0] ?? null)} />
+                        <div style={{ aspectRatio: '3/4', borderRadius: 8, overflow: 'hidden', backgroundColor: 'var(--bg)', border: `1px solid ${preview ? 'rgba(232,255,0,0.4)' : 'var(--border)'}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                          {preview
+                            ? <img src={preview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            : <><Camera size={16} color="#555" /><p style={{ fontSize: 9, color: '#555', margin: '4px 0 0', textAlign: 'center' }}>{label}</p></>}
+                          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.55)', padding: '2px 0', textAlign: 'center' }}>
+                            <span style={{ fontSize: 9, color: '#ccc' }}>{label}</span>
+                          </div>
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+              </ManualField>
               {manualError && <p style={{ color: '#FF4444', fontSize: 13, margin: 0 }}>{manualError}</p>}
               <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-                <button onClick={() => setShowManual(false)}
+                <button onClick={closeManual}
                   style={{ flex: 1, padding: '10px 0', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text-2)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
                   Cancelar
                 </button>
