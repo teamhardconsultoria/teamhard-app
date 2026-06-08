@@ -271,7 +271,7 @@ export default function Students() {
     setSelectedCoachId(student.coach_id ?? '')
     setMigrateError('')
     if (allCoaches.length === 0) {
-      const { data } = await supabase.from('coaches').select('id, users(name)').order('created_at')
+      const { data } = await supabase.from('coaches').select('id, users!coaches_user_id_fkey(name)').order('created_at')
       setAllCoaches(((data ?? []) as any[]).map(c => ({ id: c.id, name: c.users?.name ?? 'Sem nome' })))
     }
   }
