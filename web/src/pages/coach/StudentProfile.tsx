@@ -35,6 +35,7 @@ interface EditForm {
   height: string
   desired_weight: string
   goal_months: string
+  birth_date: string
   fitness_level: string
   gym_experience: string
   has_disease: boolean
@@ -88,7 +89,7 @@ export default function StudentProfile() {
   const [editForm, setEditForm] = useState<EditForm>({
     name: '', phone: '', plan_type: '', payment_status: '', plan_end: '',
     biological_sex: '', goal: '', current_weight: '', height: '', desired_weight: '', goal_months: '',
-    fitness_level: 'beginner', gym_experience: 'never',
+    birth_date: '', fitness_level: 'beginner', gym_experience: 'never',
     has_disease: false, disease_description: '', uses_medication: false, medication_description: '',
     has_injury: false, injury_description: '', has_allergy: false, allergy_description: '',
     food_restrictions: '', meals_per_day: '3', water_liters: '2', work_type: 'sedentary', sleep_hours: '7',
@@ -162,6 +163,7 @@ export default function StudentProfile() {
       height: a?.height?.toString() ?? '',
       desired_weight: a?.desired_weight?.toString() ?? '',
       goal_months: a?.goal_months?.toString() ?? '',
+      birth_date: a?.birth_date ?? '',
       fitness_level: a?.fitness_level ?? 'beginner',
       gym_experience: a?.gym_experience ?? 'never',
       has_disease: a?.has_disease ?? false,
@@ -202,6 +204,8 @@ export default function StudentProfile() {
 
     const anamnesePayload: Record<string, any> = {
       student_id: student.id,
+      full_name: editForm.name.trim(),
+      birth_date: editForm.birth_date || null,
       biological_sex: editForm.biological_sex || null,
       goal: editForm.goal || null,
       current_weight: editForm.current_weight ? parseFloat(editForm.current_weight) : null,
@@ -486,6 +490,9 @@ export default function StudentProfile() {
 
               {/* Anamnese */}
               <EditSection label="Dados Físicos e Objetivo">
+                <EditField label="Data de nascimento">
+                  <EditInput type="date" value={editForm.birth_date} onChange={v => setEditForm(p => ({ ...p, birth_date: v }))} />
+                </EditField>
                 <EditField label="Sexo biológico">
                   <select value={editForm.biological_sex} onChange={e => setEditForm(p => ({ ...p, biological_sex: e.target.value }))}
                     style={{ width: '100%', padding: '10px 12px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 14, outline: 'none' }}>
