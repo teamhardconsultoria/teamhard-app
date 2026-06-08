@@ -186,6 +186,7 @@ export default function StudentProfile() {
 
   const handleSaveEdit = async () => {
     if (!student || !editForm.name.trim()) { setEditError('O nome não pode estar vazio.'); return }
+    if (!editForm.birth_date) { setEditError('A data de nascimento é obrigatória.'); return }
     setEditSaving(true)
     setEditError('')
 
@@ -490,7 +491,7 @@ export default function StudentProfile() {
 
               {/* Anamnese */}
               <EditSection label="Dados Físicos e Objetivo">
-                <EditField label="Data de nascimento">
+                <EditField label="Data de nascimento *">
                   <EditInput type="date" value={editForm.birth_date} onChange={v => setEditForm(p => ({ ...p, birth_date: v }))} />
                 </EditField>
                 <EditField label="Sexo biológico">
