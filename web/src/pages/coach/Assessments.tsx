@@ -123,7 +123,7 @@ export default function Assessments() {
       ? new Date(new Date(newestAt).getTime() + 1000).toISOString()
       : new Date().toISOString()
     localStorage.setItem(LS_KEY(student.id), seenTs)
-    localStorage.setItem('coach_assessments_last_seen', seenTs)
+    localStorage.setItem('coach_assessments_last_seen', new Date().toISOString())
     setStudents(prev => prev.map(s => s.id === student.id ? { ...s, hasUnread: false } : s))
     window.dispatchEvent(new Event('assessment_student_viewed'))
     if (data && data.some((a: any) => !a.read_by_coach)) {
