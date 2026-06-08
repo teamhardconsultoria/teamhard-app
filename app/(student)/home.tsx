@@ -82,6 +82,17 @@ export default function HomeScreen() {
   useFocusEffect(useCallback(() => { fetchData() }, []))
   useEffect(() => { if (refresh) fetchData() }, [refresh])
 
+  useEffect(() => {
+    if (!user) return
+    const sub = supabase.channel(`home-unread-${user.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        const msg = payload.new as any
+        if (msg.receiver_id !== user.id) return
+        setData(prev => ({ ...prev, unreadMessages: prev.unreadMessages + 1 }))
+      }).subscribe()
+    return () => { supabase.removeChannel(sub) }
+  }, [user])
+
   const onRefresh = async () => {
     setRefreshing(true)
     await fetchData()
