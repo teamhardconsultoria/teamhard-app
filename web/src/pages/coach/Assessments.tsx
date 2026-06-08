@@ -45,14 +45,18 @@ export default function Assessments() {
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
 
+  const coachIdRef = useRef<string | null>(null)
   const studentIdsRef = useRef<string[]>([])
   const subRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
-  const refreshUnread = async (ids: string[]) => {
-    if (!ids.length) return
+  const refreshUnread = async () => {
+    const ids = studentIdsRef.current
+    const cId = coachIdRef.current
+    if (!ids.length || !cId) return
     const { data } = await supabase
       .from('assessments')
       .select('student_id')
+      .eq('coach_id', cId)
       .eq('read_by_coach', false)
       .in('student_id', ids)
     const unreadSet = new Set((data || []).map((a: any) => a.student_id))
@@ -61,10 +65,12 @@ export default function Assessments() {
 
   useEffect(() => {
     init()
-    const onFocus = () => refreshUnread(studentIdsRef.current)
+    const onFocus = () => refreshUnread()
     window.addEventListener('focus', onFocus)
+    const interval = setInterval(refreshUnread, 20000)
     return () => {
       window.removeEventListener('focus', onFocus)
+      clearInterval(interval)
       if (subRef.current) supabase.removeChannel(subRef.current)
     }
   }, [])
@@ -73,6 +79,7 @@ export default function Assessments() {
     const { data: coach } = await supabase.from('coaches').select('id').eq('user_id', user!.id).single()
     if (!coach) { setLoadingStudents(false); return }
     setCoachId(coach.id)
+    coachIdRef.current = coach.id
     const { data } = await supabase.from('students').select('id, user:users(name, email)').eq('coach_id', coach.id).order('created_at', { ascending: false })
     const studentList = (data || []).map((s: any) => ({ id: s.id, name: s.user.name, email: s.user.email }))
 
@@ -80,7 +87,7 @@ export default function Assessments() {
     studentIdsRef.current = ids
 
     const { data: unread } = ids.length
-      ? await supabase.from('assessments').select('student_id').eq('read_by_coach', false).in('student_id', ids)
+      ? await supabase.from('assessments').select('student_id').eq('coach_id', coach.id).eq('read_by_coach', false).in('student_id', ids)
       : { data: [] }
     const unreadSet = new Set((unread || []).map((a: any) => a.student_id))
     setStudents(studentList.map(s => ({ ...s, hasUnread: unreadSet.has(s.id) })))
@@ -88,9 +95,9 @@ export default function Assessments() {
 
     if (subRef.current) supabase.removeChannel(subRef.current)
     subRef.current = supabase
-      .channel('assessments-unread')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'assessments', filter: `coach_id=eq.${coach.id}` }, () => {
-        refreshUnread(studentIdsRef.current)
+      .channel(`assessments-coach-${coach.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'assessments' }, () => {
+        refreshUnread()
       })
       .subscribe()
   }
