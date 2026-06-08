@@ -197,7 +197,17 @@ export default function Students() {
           plan_start: form.plan_start, coach_id: coach.id,
         },
       })
-      if (fnError || data?.error) { setError(data?.error || fnError?.message || 'Erro ao criar aluno.'); return }
+      if (fnError) {
+        let msg = 'Erro ao criar aluno.'
+        try {
+          const body = await (fnError as any).context?.json?.()
+          if (body?.error) msg = body.error
+          else if (body?.message) msg = body.message
+        } catch {}
+        setError(msg)
+        return
+      }
+      if (data?.error) { setError(data.error); return }
 
       // Gera cronograma de parcelas se valor informado
       if (form.amount && parseFloat(form.amount) > 0 && data.student_id) {
