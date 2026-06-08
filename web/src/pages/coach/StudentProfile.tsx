@@ -28,9 +28,28 @@ interface EditForm {
   plan_type: string
   payment_status: string
   plan_end: string
+  // Anamnese
+  biological_sex: string
   goal: string
   current_weight: string
   height: string
+  desired_weight: string
+  goal_months: string
+  fitness_level: string
+  gym_experience: string
+  has_disease: boolean
+  disease_description: string
+  uses_medication: boolean
+  medication_description: string
+  has_injury: boolean
+  injury_description: string
+  has_allergy: boolean
+  allergy_description: string
+  food_restrictions: string
+  meals_per_day: string
+  water_liters: string
+  work_type: string
+  sleep_hours: string
 }
 
 const PLAN_LABELS: Record<string, string> = {
@@ -66,7 +85,14 @@ export default function StudentProfile() {
 
   // Edit modal (super_admin only)
   const [showEdit, setShowEdit] = useState(false)
-  const [editForm, setEditForm] = useState<EditForm>({ name: '', phone: '', plan_type: '', payment_status: '', plan_end: '', goal: '', current_weight: '', height: '' })
+  const [editForm, setEditForm] = useState<EditForm>({
+    name: '', phone: '', plan_type: '', payment_status: '', plan_end: '',
+    biological_sex: '', goal: '', current_weight: '', height: '', desired_weight: '', goal_months: '',
+    fitness_level: 'beginner', gym_experience: 'never',
+    has_disease: false, disease_description: '', uses_medication: false, medication_description: '',
+    has_injury: false, injury_description: '', has_allergy: false, allergy_description: '',
+    food_restrictions: '', meals_per_day: '3', water_liters: '2', work_type: 'sedentary', sleep_hours: '7',
+  })
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
 
@@ -123,15 +149,34 @@ export default function StudentProfile() {
 
   const openEdit = () => {
     if (!student) return
+    const a = student.anamnese as any
     setEditForm({
       name: student.user.name,
       phone: student.user.phone ?? '',
       plan_type: student.plan_type,
       payment_status: student.payment_status,
       plan_end: student.plan_end,
-      goal: student.anamnese?.goal ?? '',
-      current_weight: student.anamnese?.current_weight?.toString() ?? '',
-      height: student.anamnese?.height?.toString() ?? '',
+      biological_sex: a?.biological_sex ?? '',
+      goal: a?.goal ?? '',
+      current_weight: a?.current_weight?.toString() ?? '',
+      height: a?.height?.toString() ?? '',
+      desired_weight: a?.desired_weight?.toString() ?? '',
+      goal_months: a?.goal_months?.toString() ?? '',
+      fitness_level: a?.fitness_level ?? 'beginner',
+      gym_experience: a?.gym_experience ?? 'never',
+      has_disease: a?.has_disease ?? false,
+      disease_description: a?.disease_description ?? '',
+      uses_medication: a?.uses_medication ?? false,
+      medication_description: a?.medication_description ?? '',
+      has_injury: a?.has_injury ?? false,
+      injury_description: a?.injury_description ?? '',
+      has_allergy: a?.has_allergy ?? false,
+      allergy_description: a?.allergy_description ?? '',
+      food_restrictions: a?.food_restrictions ?? '',
+      meals_per_day: a?.meals_per_day?.toString() ?? '3',
+      water_liters: a?.water_liters?.toString() ?? '2',
+      work_type: a?.work_type ?? 'sedentary',
+      sleep_hours: a?.sleep_hours?.toString() ?? '7',
     })
     setEditError('')
     setShowEdit(true)
@@ -155,16 +200,32 @@ export default function StudentProfile() {
     }).eq('id', student.id)
     if (studentErr) { setEditError(studentErr.message); setEditSaving(false); return }
 
-    if (student.anamnese) {
-      const anamnesePayload: Record<string, any> = {}
-      if (editForm.goal) anamnesePayload.goal = editForm.goal
-      if (editForm.current_weight) anamnesePayload.current_weight = parseFloat(editForm.current_weight)
-      if (editForm.height) anamnesePayload.height = parseFloat(editForm.height)
-      if (Object.keys(anamnesePayload).length > 0) {
-        const { error: anamneseErr } = await supabase.from('anamnese').update(anamnesePayload).eq('student_id', student.id)
-        if (anamneseErr) { setEditError(anamneseErr.message); setEditSaving(false); return }
-      }
+    const anamnesePayload: Record<string, any> = {
+      student_id: student.id,
+      biological_sex: editForm.biological_sex || null,
+      goal: editForm.goal || null,
+      current_weight: editForm.current_weight ? parseFloat(editForm.current_weight) : null,
+      height: editForm.height ? parseFloat(editForm.height) : null,
+      desired_weight: editForm.desired_weight ? parseFloat(editForm.desired_weight) : null,
+      goal_months: editForm.goal_months ? parseInt(editForm.goal_months) : null,
+      fitness_level: editForm.fitness_level || null,
+      gym_experience: editForm.gym_experience || null,
+      has_disease: editForm.has_disease,
+      disease_description: editForm.has_disease ? editForm.disease_description : null,
+      uses_medication: editForm.uses_medication,
+      medication_description: editForm.uses_medication ? editForm.medication_description : null,
+      has_injury: editForm.has_injury,
+      injury_description: editForm.has_injury ? editForm.injury_description : null,
+      has_allergy: editForm.has_allergy,
+      allergy_description: editForm.has_allergy ? editForm.allergy_description : null,
+      food_restrictions: editForm.food_restrictions || null,
+      meals_per_day: editForm.meals_per_day ? parseInt(editForm.meals_per_day) : null,
+      water_liters: editForm.water_liters ? parseFloat(editForm.water_liters) : null,
+      work_type: editForm.work_type || null,
+      sleep_hours: editForm.sleep_hours ? parseFloat(editForm.sleep_hours) : null,
     }
+    const { error: anamneseErr } = await supabase.from('anamnese').upsert(anamnesePayload, { onConflict: 'student_id' })
+    if (anamneseErr) { setEditError(anamneseErr.message); setEditSaving(false); return }
 
     setEditSaving(false)
     setShowEdit(false)
@@ -181,7 +242,7 @@ export default function StudentProfile() {
       const [sessionRes, assessRes, anamneseRes] = await Promise.all([
         supabase.from('training_sessions').select('finished_at').eq('student_id', id).order('finished_at', { ascending: false }).limit(1).maybeSingle(),
         supabase.from('assessments').select('weight, created_at').eq('student_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('anamnese').select('goal, current_weight, height, tmb, get_value, fitness_level, biological_sex').eq('student_id', id).maybeSingle(),
+        supabase.from('anamnese').select('*').eq('student_id', id).maybeSingle(),
       ])
       setStudent({
         ...data,
@@ -241,14 +302,12 @@ export default function StudentProfile() {
               <p style={{ fontSize: 12, color: 'var(--text-2)', margin: '4px 0 0 0' }}>{PLAN_LABELS[student.plan_type] || student.plan_type}</p>
               <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '2px 0 0 0' }}>Vence {new Date(student.plan_end).toLocaleDateString('pt-BR')}</p>
             </div>
-            {isSuperAdmin && (
-              <button onClick={openEdit}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', backgroundColor: 'rgba(232,255,0,0.1)', border: '1px solid rgba(232,255,0,0.25)', borderRadius: 8, color: '#E8FF00', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(232,255,0,0.2)')}
-                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(232,255,0,0.1)')}>
-                <Pencil size={13} /> Editar perfil
-              </button>
-            )}
+            <button onClick={openEdit}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', backgroundColor: 'rgba(232,255,0,0.1)', border: '1px solid rgba(232,255,0,0.25)', borderRadius: 8, color: '#E8FF00', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(232,255,0,0.2)')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(232,255,0,0.1)')}>
+              <Pencil size={13} /> Editar perfil
+            </button>
           </div>
         </div>
 
@@ -425,29 +484,117 @@ export default function StudentProfile() {
                 </EditField>
               </EditSection>
 
-              {/* Dados físicos (somente se tem anamnese) */}
-              {student.anamnese && (
-                <EditSection label="Dados Físicos">
-                  <EditField label="Objetivo">
-                    <select value={editForm.goal} onChange={e => setEditForm(p => ({ ...p, goal: e.target.value }))}
+              {/* Anamnese */}
+              <EditSection label="Dados Físicos e Objetivo">
+                <EditField label="Sexo biológico">
+                  <select value={editForm.biological_sex} onChange={e => setEditForm(p => ({ ...p, biological_sex: e.target.value }))}
+                    style={{ width: '100%', padding: '10px 12px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 14, outline: 'none' }}>
+                    <option value="">Selecionar…</option>
+                    <option value="male">Masculino</option>
+                    <option value="female">Feminino</option>
+                  </select>
+                </EditField>
+                <EditField label="Objetivo">
+                  <select value={editForm.goal} onChange={e => setEditForm(p => ({ ...p, goal: e.target.value }))}
+                    style={{ width: '100%', padding: '10px 12px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 14, outline: 'none' }}>
+                    <option value="">Selecionar…</option>
+                    <option value="weight_loss">Emagrecimento</option>
+                    <option value="muscle_gain">Ganho de massa</option>
+                    <option value="health">Saúde</option>
+                    <option value="performance">Performance</option>
+                    <option value="other">Outro</option>
+                  </select>
+                </EditField>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <EditField label="Peso atual (kg)">
+                    <EditInput type="number" value={editForm.current_weight} onChange={v => setEditForm(p => ({ ...p, current_weight: v }))} placeholder="Ex: 70.5" step="0.1" min="30" max="250" />
+                  </EditField>
+                  <EditField label="Peso desejado (kg)">
+                    <EditInput type="number" value={editForm.desired_weight} onChange={v => setEditForm(p => ({ ...p, desired_weight: v }))} placeholder="Ex: 65.0" step="0.1" min="30" max="250" />
+                  </EditField>
+                  <EditField label="Altura (cm)">
+                    <EditInput type="number" value={editForm.height} onChange={v => setEditForm(p => ({ ...p, height: v }))} placeholder="Ex: 175" step="1" min="100" max="250" />
+                  </EditField>
+                  <EditField label="Prazo do objetivo (meses)">
+                    <EditInput type="number" value={editForm.goal_months} onChange={v => setEditForm(p => ({ ...p, goal_months: v }))} placeholder="Ex: 6" step="1" min="1" max="60" />
+                  </EditField>
+                </div>
+              </EditSection>
+
+              <EditSection label="Experiência e Rotina">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <EditField label="Nível de condicionamento">
+                    <select value={editForm.fitness_level} onChange={e => setEditForm(p => ({ ...p, fitness_level: e.target.value }))}
                       style={{ width: '100%', padding: '10px 12px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 14, outline: 'none' }}>
-                      <option value="weight_loss">Emagrecimento</option>
-                      <option value="muscle_gain">Ganho de massa</option>
-                      <option value="health">Saúde</option>
-                      <option value="performance">Performance</option>
-                      <option value="other">Outro</option>
+                      <option value="beginner">Iniciante</option>
+                      <option value="intermediate">Intermediário</option>
+                      <option value="advanced">Avançado</option>
                     </select>
                   </EditField>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <EditField label="Peso atual (kg)">
-                      <EditInput type="number" value={editForm.current_weight} onChange={v => setEditForm(p => ({ ...p, current_weight: v }))} placeholder="Ex: 70.5" step="0.1" min="30" max="250" />
-                    </EditField>
-                    <EditField label="Altura (cm)">
-                      <EditInput type="number" value={editForm.height} onChange={v => setEditForm(p => ({ ...p, height: v }))} placeholder="Ex: 175" step="0.1" min="100" max="250" />
-                    </EditField>
-                  </div>
-                </EditSection>
-              )}
+                  <EditField label="Experiência na musculação">
+                    <select value={editForm.gym_experience} onChange={e => setEditForm(p => ({ ...p, gym_experience: e.target.value }))}
+                      style={{ width: '100%', padding: '10px 12px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 14, outline: 'none' }}>
+                      <option value="never">Nunca treinei</option>
+                      <option value="less_1y">Menos de 1 ano</option>
+                      <option value="1_3y">1 a 3 anos</option>
+                      <option value="more_3y">Mais de 3 anos</option>
+                    </select>
+                  </EditField>
+                  <EditField label="Tipo de trabalho">
+                    <select value={editForm.work_type} onChange={e => setEditForm(p => ({ ...p, work_type: e.target.value }))}
+                      style={{ width: '100%', padding: '10px 12px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 14, outline: 'none' }}>
+                      <option value="sedentary">Sedentário</option>
+                      <option value="light">Leve (em pé ou caminhando)</option>
+                      <option value="moderate">Moderado</option>
+                      <option value="heavy">Pesado (trabalho físico)</option>
+                    </select>
+                  </EditField>
+                  <EditField label="Horas de sono/noite">
+                    <EditInput type="number" value={editForm.sleep_hours} onChange={v => setEditForm(p => ({ ...p, sleep_hours: v }))} placeholder="Ex: 7" step="0.5" min="3" max="12" />
+                  </EditField>
+                </div>
+              </EditSection>
+
+              <EditSection label="Saúde">
+                <CheckRow label="Possui alguma doença ou condição médica?" checked={editForm.has_disease} onChange={v => setEditForm(p => ({ ...p, has_disease: v }))} />
+                {editForm.has_disease && (
+                  <EditField label="Descreva">
+                    <EditInput value={editForm.disease_description} onChange={v => setEditForm(p => ({ ...p, disease_description: v }))} placeholder="Ex: Diabetes tipo 2, hipertensão…" />
+                  </EditField>
+                )}
+                <CheckRow label="Faz uso de medicamentos?" checked={editForm.uses_medication} onChange={v => setEditForm(p => ({ ...p, uses_medication: v }))} />
+                {editForm.uses_medication && (
+                  <EditField label="Quais medicamentos?">
+                    <EditInput value={editForm.medication_description} onChange={v => setEditForm(p => ({ ...p, medication_description: v }))} placeholder="Ex: Metformina 500mg…" />
+                  </EditField>
+                )}
+                <CheckRow label="Possui lesão ou limitação física?" checked={editForm.has_injury} onChange={v => setEditForm(p => ({ ...p, has_injury: v }))} />
+                {editForm.has_injury && (
+                  <EditField label="Descreva a lesão">
+                    <EditInput value={editForm.injury_description} onChange={v => setEditForm(p => ({ ...p, injury_description: v }))} placeholder="Ex: Hérnia de disco L4-L5…" />
+                  </EditField>
+                )}
+              </EditSection>
+
+              <EditSection label="Alimentação">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <EditField label="Refeições por dia">
+                    <EditInput type="number" value={editForm.meals_per_day} onChange={v => setEditForm(p => ({ ...p, meals_per_day: v }))} placeholder="Ex: 4" step="1" min="1" max="10" />
+                  </EditField>
+                  <EditField label="Água (litros/dia)">
+                    <EditInput type="number" value={editForm.water_liters} onChange={v => setEditForm(p => ({ ...p, water_liters: v }))} placeholder="Ex: 2" step="0.5" min="0.5" max="10" />
+                  </EditField>
+                </div>
+                <CheckRow label="Possui alergia alimentar?" checked={editForm.has_allergy} onChange={v => setEditForm(p => ({ ...p, has_allergy: v }))} />
+                {editForm.has_allergy && (
+                  <EditField label="Quais alergias?">
+                    <EditInput value={editForm.allergy_description} onChange={v => setEditForm(p => ({ ...p, allergy_description: v }))} placeholder="Ex: Lactose, glúten…" />
+                  </EditField>
+                )}
+                <EditField label="Restrições alimentares">
+                  <EditInput value={editForm.food_restrictions} onChange={v => setEditForm(p => ({ ...p, food_restrictions: v }))} placeholder="Ex: Vegetariano, sem glúten…" />
+                </EditField>
+              </EditSection>
 
               {editError && (
                 <p style={{ color: '#FF4444', fontSize: 13, margin: 0, padding: '8px 12px', backgroundColor: 'rgba(255,68,68,0.08)', borderRadius: 8, border: '1px solid rgba(255,68,68,0.2)' }}>
@@ -491,6 +638,16 @@ function EditField({ label, children }: { label: string; children: React.ReactNo
       <label style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600 }}>{label}</label>
       {children}
     </div>
+  )
+}
+
+function CheckRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)}
+        style={{ width: 16, height: 16, accentColor: '#E8FF00', cursor: 'pointer' }} />
+      <span style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.4 }}>{label}</span>
+    </label>
   )
 }
 
