@@ -49,18 +49,29 @@ export default function Assessments() {
   const studentIdsRef = useRef<string[]>([])
   const subRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
+  const LS_KEY = (studentId: string) => `assess_last_seen_${studentId}`
+
   const refreshUnread = async () => {
     const ids = studentIdsRef.current
     const cId = coachIdRef.current
     if (!ids.length || !cId) return
+    const minTs = ids.reduce((min, id) => {
+      const ts = localStorage.getItem(LS_KEY(id)) || new Date(0).toISOString()
+      return ts < min ? ts : min
+    }, new Date().toISOString())
     const { data } = await supabase
       .from('assessments')
-      .select('student_id')
+      .select('student_id, created_at')
       .eq('coach_id', cId)
-      .eq('read_by_coach', false)
+      .gt('created_at', minTs)
       .in('student_id', ids)
-    const unreadSet = new Set((data || []).map((a: any) => a.student_id))
-    setStudents(prev => prev.map(s => ({ ...s, hasUnread: unreadSet.has(s.id) })))
+    const now = new Date().toISOString()
+    const hasNew: Record<string, boolean> = {}
+    for (const a of data || []) {
+      const lastSeen = localStorage.getItem(LS_KEY(a.student_id)) || new Date(0).toISOString()
+      if (a.created_at > lastSeen) hasNew[a.student_id] = true
+    }
+    setStudents(prev => prev.map(s => ({ ...s, hasUnread: !!hasNew[s.id] })))
   }
 
   useEffect(() => {
@@ -82,16 +93,11 @@ export default function Assessments() {
     coachIdRef.current = coach.id
     const { data } = await supabase.from('students').select('id, user:users(name, email)').eq('coach_id', coach.id).order('created_at', { ascending: false })
     const studentList = (data || []).map((s: any) => ({ id: s.id, name: s.user.name, email: s.user.email }))
-
     const ids = studentList.map(s => s.id)
     studentIdsRef.current = ids
-
-    const { data: unread } = ids.length
-      ? await supabase.from('assessments').select('student_id').eq('coach_id', coach.id).eq('read_by_coach', false).in('student_id', ids)
-      : { data: [] }
-    const unreadSet = new Set((unread || []).map((a: any) => a.student_id))
-    setStudents(studentList.map(s => ({ ...s, hasUnread: unreadSet.has(s.id) })))
+    setStudents(studentList.map(s => ({ ...s })))
     setLoadingStudents(false)
+    await refreshUnread()
 
     if (subRef.current) supabase.removeChannel(subRef.current)
     subRef.current = supabase
@@ -103,6 +109,8 @@ export default function Assessments() {
   }
 
   const selectStudent = async (student: Student) => {
+    localStorage.setItem(LS_KEY(student.id), new Date().toISOString())
+    setStudents(prev => prev.map(s => s.id === student.id ? { ...s, hasUnread: false } : s))
     setSelected(student); setAssessments([]); setLoadingAssessments(true); setShowCompare(false)
     const { data } = await supabase.from('assessments').select('id, weight, height, body_fat_pct, notes, read_by_coach, created_at').eq('student_id', student.id).order('created_at', { ascending: false })
     const withPhotos = await Promise.all((data || []).map(async (a: any) => {
@@ -113,7 +121,6 @@ export default function Assessments() {
     setLoadingAssessments(false)
     if (data && data.some((a: any) => !a.read_by_coach)) {
       await supabase.from('assessments').update({ read_by_coach: true }).eq('student_id', student.id).eq('read_by_coach', false)
-      setStudents(prev => prev.map(s => s.id === student.id ? { ...s, hasUnread: false } : s))
     }
   }
 
