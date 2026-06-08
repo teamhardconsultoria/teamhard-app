@@ -39,7 +39,7 @@ export default function Assessments() {
   const [manualPreviews, setManualPreviews] = useState<Record<string, string>>({})
 
   const [editAssessment, setEditAssessment] = useState<Assessment | null>(null)
-  const [editForm, setEditForm] = useState({ weight: '', height: '', body_fat_pct: '', notes: '' })
+  const [editForm, setEditForm] = useState({ date: '', weight: '', height: '', body_fat_pct: '', notes: '' })
   const [editPhotos, setEditPhotos] = useState<Record<PhotoAngle, File | null>>({ front: null, back: null, left: null, right: null })
   const [editPreviews, setEditPreviews] = useState<Record<string, string>>({})
   const [editSaving, setEditSaving] = useState(false)
@@ -108,7 +108,7 @@ export default function Assessments() {
 
   const openEdit = (a: Assessment) => {
     setEditAssessment(a)
-    setEditForm({ weight: String(a.weight), height: String(a.height), body_fat_pct: a.body_fat_pct != null ? String(a.body_fat_pct) : '', notes: a.notes || '' })
+    setEditForm({ date: a.created_at.split('T')[0], weight: String(a.weight), height: String(a.height), body_fat_pct: a.body_fat_pct != null ? String(a.body_fat_pct) : '', notes: a.notes || '' })
     setEditPhotos({ front: null, back: null, left: null, right: null })
     setEditPreviews({})
     setEditError('')
@@ -132,6 +132,7 @@ export default function Assessments() {
     if (!editAssessment || !editForm.weight) { setEditError('Peso é obrigatório.'); return }
     setEditSaving(true); setEditError('')
     const { error } = await supabase.from('assessments').update({
+      created_at: editForm.date ? editForm.date + 'T12:00:00' : undefined,
       weight: parseFloat(editForm.weight),
       height: editForm.height ? parseFloat(editForm.height) : null,
       body_fat_pct: editForm.body_fat_pct ? parseFloat(editForm.body_fat_pct) : null,
@@ -354,6 +355,11 @@ export default function Assessments() {
               <button onClick={closeEdit} style={{ background: 'none', border: 'none', color: 'var(--text-2)', cursor: 'pointer' }}><X size={20} /></button>
             </div>
             <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <ManualField label="Data da avaliação">
+                <input type="date" value={editForm.date}
+                  onChange={e => setEditForm(p => ({ ...p, date: e.target.value }))}
+                  style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
+              </ManualField>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <ManualField label="Peso (kg) *">
                   <input type="number" value={editForm.weight} placeholder="Ex: 72.5" step="0.1" min="30" max="300"
