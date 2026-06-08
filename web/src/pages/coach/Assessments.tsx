@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Scale, ChevronDown, ChevronLeft, ChevronRight, X, ImageOff, SlidersHorizontal } from 'lucide-react'
+import { Scale, ChevronDown, ChevronLeft, ChevronRight, X, ImageOff, SlidersHorizontal, ClipboardPlus } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 
@@ -14,8 +14,11 @@ const ANGLE: Record<string, string> = { front: 'Frente', back: 'Costas', left: '
 const ANGLE_ORDER = ['front', 'back', 'left', 'right']
 const spin = { width: 24, height: 24, border: '2px solid #E8FF00', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }
 
+interface ManualForm { date: string; weight: string; height: string; body_fat_pct: string; notes: string }
+
 export default function Assessments() {
   const { user } = useAuthStore()
+  const [coachId, setCoachId] = useState<string | null>(null)
   const [students, setStudents] = useState<Student[]>([])
   const [selected, setSelected] = useState<Student | null>(null)
   const [assessments, setAssessments] = useState<Assessment[]>([])
@@ -23,12 +26,17 @@ export default function Assessments() {
   const [loadingAssessments, setLoadingAssessments] = useState(false)
   const [lightbox, setLightbox] = useState<{ photos: AssessmentPhoto[]; index: number } | null>(null)
   const [showCompare, setShowCompare] = useState(false)
+  const [showManual, setShowManual] = useState(false)
+  const [manualForm, setManualForm] = useState<ManualForm>({ date: '', weight: '', height: '', body_fat_pct: '', notes: '' })
+  const [manualSaving, setManualSaving] = useState(false)
+  const [manualError, setManualError] = useState('')
 
   useEffect(() => { init() }, [])
 
   const init = async () => {
     const { data: coach } = await supabase.from('coaches').select('id').eq('user_id', user!.id).single()
     if (!coach) { setLoadingStudents(false); return }
+    setCoachId(coach.id)
     const { data } = await supabase.from('students').select('id, user:users(name, email)').eq('coach_id', coach.id).order('created_at', { ascending: false })
     const studentList = (data || []).map((s: any) => ({ id: s.id, name: s.user.name, email: s.user.email }))
 
@@ -60,6 +68,32 @@ export default function Assessments() {
   const moveLightbox = (dir: number) => {
     if (!lightbox) return
     setLightbox({ ...lightbox, index: (lightbox.index + dir + lightbox.photos.length) % lightbox.photos.length })
+  }
+
+  const openManual = () => {
+    setManualForm({ date: new Date().toISOString().split('T')[0], weight: '', height: '', body_fat_pct: '', notes: '' })
+    setManualError('')
+    setShowManual(true)
+  }
+
+  const saveManual = async () => {
+    if (!selected || !manualForm.date || !manualForm.weight) { setManualError('Data e peso são obrigatórios.'); return }
+    setManualSaving(true)
+    setManualError('')
+    const { error } = await supabase.from('assessments').insert({
+      student_id: selected.id,
+      coach_id: coachId,
+      weight: parseFloat(manualForm.weight),
+      height: manualForm.height ? parseFloat(manualForm.height) : null,
+      body_fat_pct: manualForm.body_fat_pct ? parseFloat(manualForm.body_fat_pct) : null,
+      notes: manualForm.notes || null,
+      read_by_coach: true,
+      created_at: manualForm.date + 'T12:00:00',
+    })
+    if (error) { setManualError(error.message); setManualSaving(false); return }
+    setShowManual(false)
+    setManualSaving(false)
+    selectStudent(selected)
   }
 
   const imc = (w: number, h: number) => (w / ((h / 100) ** 2)).toFixed(1)
@@ -95,17 +129,28 @@ export default function Assessments() {
                 <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0 }}>{assessments.length} avaliação{assessments.length !== 1 ? 'ões' : ''}</p>
               </div>
             </div>
-            {assessments.length >= 2 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button
-                onClick={() => setShowCompare(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', backgroundColor: 'transparent', color: 'var(--text)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--surface-hover)' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent' }}
+                onClick={openManual}
+                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(232,255,0,0.3)', backgroundColor: 'rgba(232,255,0,0.08)', color: '#E8FF00', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(232,255,0,0.16)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(232,255,0,0.08)' }}
               >
-                <SlidersHorizontal size={15} />
-                Comparar
+                <ClipboardPlus size={15} />
+                Registrar histórico
               </button>
-            )}
+              {assessments.length >= 2 && (
+                <button
+                  onClick={() => setShowCompare(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', backgroundColor: 'transparent', color: 'var(--text)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--surface-hover)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent' }}
+                >
+                  <SlidersHorizontal size={15} />
+                  Comparar
+                </button>
+              )}
+            </div>
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -124,6 +169,62 @@ export default function Assessments() {
       ) : (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Empty icon={<Scale size={24} color="#888" />} title="Selecione um aluno" sub="Veja o histórico de avaliações" />
+        </div>
+      )}
+
+      {/* Modal: registrar avaliação histórica */}
+      {showManual && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+          <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, width: '100%', maxWidth: 440 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--text)', margin: 0 }}>Registrar avaliação histórica</p>
+                <p style={{ fontSize: 12, color: 'var(--text-2)', margin: '3px 0 0 0' }}>{selected?.name}</p>
+              </div>
+              <button onClick={() => setShowManual(false)} style={{ background: 'none', border: 'none', color: 'var(--text-2)', cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <ManualField label="Data da avaliação *">
+                <input type="date" value={manualForm.date} max={new Date().toISOString().split('T')[0]}
+                  onChange={e => setManualForm(p => ({ ...p, date: e.target.value }))}
+                  style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
+              </ManualField>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <ManualField label="Peso (kg) *">
+                  <input type="number" value={manualForm.weight} placeholder="Ex: 72.5" step="0.1" min="30" max="300"
+                    onChange={e => setManualForm(p => ({ ...p, weight: e.target.value }))}
+                    style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
+                </ManualField>
+                <ManualField label="Altura (cm)">
+                  <input type="number" value={manualForm.height} placeholder="Ex: 175" step="1" min="100" max="250"
+                    onChange={e => setManualForm(p => ({ ...p, height: e.target.value }))}
+                    style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
+                </ManualField>
+              </div>
+              <ManualField label="% Gordura corporal">
+                <input type="number" value={manualForm.body_fat_pct} placeholder="Ex: 18.5" step="0.1" min="1" max="60"
+                  onChange={e => setManualForm(p => ({ ...p, body_fat_pct: e.target.value }))}
+                  style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
+              </ManualField>
+              <ManualField label="Observações">
+                <textarea value={manualForm.notes} placeholder="Medidas, notas do coach, contexto…" rows={3}
+                  onChange={e => setManualForm(p => ({ ...p, notes: e.target.value }))}
+                  style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+                  onFocus={focusStyle} onBlur={blurStyle} />
+              </ManualField>
+              {manualError && <p style={{ color: '#FF4444', fontSize: 13, margin: 0 }}>{manualError}</p>}
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <button onClick={() => setShowManual(false)}
+                  style={{ flex: 1, padding: '10px 0', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text-2)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                  Cancelar
+                </button>
+                <button onClick={saveManual} disabled={manualSaving}
+                  style={{ flex: 2, padding: '10px 0', backgroundColor: manualSaving ? 'var(--border)' : '#E8FF00', color: manualSaving ? 'var(--text-2)' : '#0A0A0A', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: manualSaving ? 'not-allowed' : 'pointer' }}>
+                  {manualSaving ? 'Salvando…' : 'Salvar avaliação'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -516,6 +617,22 @@ function Avatar({ name, size = 36 }: { name: string; size?: number }) {
   return (
     <div style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: '#E8FF00', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: size * 0.4, fontWeight: 900, color: '#0A0A0A' }}>
       {name.charAt(0)}
+    </div>
+  )
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%', padding: '10px 12px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)',
+  borderRadius: 8, color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box',
+}
+const focusStyle = (e: React.FocusEvent<HTMLElement>) => { (e.currentTarget as HTMLElement).style.borderColor = '#E8FF00' }
+const blurStyle = (e: React.FocusEvent<HTMLElement>) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)' }
+
+function ManualField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <label style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600 }}>{label}</label>
+      {children}
     </div>
   )
 }
