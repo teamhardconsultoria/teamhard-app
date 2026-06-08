@@ -45,7 +45,19 @@ export default function Assessments() {
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
 
-  useEffect(() => { init() }, [])
+  useEffect(() => {
+    init()
+    const sub = supabase
+      .channel('assessments-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'assessments' }, payload => {
+        const studentId = (payload.new as any).student_id
+        setStudents(prev => prev.map(s =>
+          s.id === studentId ? { ...s, hasUnread: true } : s
+        ))
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(sub) }
+  }, [])
 
   const init = async () => {
     const { data: coach } = await supabase.from('coaches').select('id').eq('user_id', user!.id).single()
