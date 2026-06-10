@@ -43,8 +43,6 @@ export default function AnamneseScreen() {
     goal: '',
     current_weight: '',
     height: '',
-    desired_weight: '',
-    goal_months: '',
     // Bloco C
     has_disease: false,
     disease_description: '',
@@ -69,10 +67,11 @@ export default function AnamneseScreen() {
     has_busy_routine: false,
     preferred_workout_time: 'morning',
     // Bloco F
-    gym_experience: 'never',
+    training_time: 'less_1yr',
+    has_good_technique: false,
+    load_progressing: false,
     practices_sport: false,
     sport_description: '',
-    fitness_level: 'beginner',
   })
 
   const set = (key: string, value: any) => setData(prev => ({ ...prev, [key]: value }))
@@ -87,6 +86,11 @@ export default function AnamneseScreen() {
         .from('anamnese').select('*').eq('student_id', studentData.id).maybeSingle()
       if (!ex) return
 
+      if (ex.completed) {
+        router.replace('/(student)/home')
+        return
+      }
+
       setData(prev => ({
         ...prev,
         full_name: ex.full_name || prev.full_name,
@@ -100,8 +104,6 @@ export default function AnamneseScreen() {
         goal: ex.goal || prev.goal,
         current_weight: ex.current_weight != null ? String(ex.current_weight) : prev.current_weight,
         height: ex.height != null ? String(ex.height) : prev.height,
-        desired_weight: ex.desired_weight != null ? String(ex.desired_weight) : prev.desired_weight,
-        goal_months: ex.goal_months != null ? String(ex.goal_months) : prev.goal_months,
         has_disease: ex.has_disease ?? prev.has_disease,
         disease_description: ex.disease_description || prev.disease_description,
         uses_medication: ex.uses_medication ?? prev.uses_medication,
@@ -122,10 +124,11 @@ export default function AnamneseScreen() {
         work_type: ex.work_type || prev.work_type,
         has_busy_routine: ex.has_busy_routine ?? prev.has_busy_routine,
         preferred_workout_time: ex.preferred_workout_time || prev.preferred_workout_time,
-        gym_experience: ex.gym_experience || prev.gym_experience,
+        training_time: ex.training_time || prev.training_time,
+        has_good_technique: ex.has_good_technique ?? prev.has_good_technique,
+        load_progressing: ex.load_progressing ?? prev.load_progressing,
         practices_sport: ex.practices_sport ?? prev.practices_sport,
         sport_description: ex.sport_description || prev.sport_description,
-        fitness_level: ex.fitness_level || prev.fitness_level,
       }))
     }
     loadExisting()
@@ -166,8 +169,6 @@ export default function AnamneseScreen() {
         birth_date: birthDateToISO(data.birth_date) ?? data.birth_date,
         current_weight: parseFloat(data.current_weight),
         height: parseFloat(data.height),
-        desired_weight: data.desired_weight ? parseFloat(data.desired_weight) : null,
-        goal_months: data.goal_months ? parseInt(data.goal_months) : null,
         meals_per_day: parseInt(data.meals_per_day),
         water_liters: parseFloat(data.water_liters),
         sleep_hours: parseFloat(data.sleep_hours),
@@ -281,11 +282,9 @@ function BlocoA({ data, set }: any) {
 
 function BlocoB({ data, set }: any) {
   const goals = [
-    { label: 'Emagrecer', value: 'weight_loss' },
     { label: 'Ganhar massa', value: 'muscle_gain' },
-    { label: 'Melhorar saúde', value: 'health' },
-    { label: 'Performance', value: 'performance' },
-    { label: 'Outro', value: 'other' },
+    { label: 'Emagrecer', value: 'weight_loss' },
+    { label: 'Qualidade de vida', value: 'quality_of_life' },
   ]
   return (
     <View style={s.block}>
@@ -313,14 +312,6 @@ function BlocoB({ data, set }: any) {
 
       <Field label="Altura (cm)" required>
         <TextInput style={s.input} value={data.height} onChangeText={v => set('height', v)} placeholder="Ex: 175" placeholderTextColor={colors.subtext} keyboardType="decimal-pad" />
-      </Field>
-
-      <Field label="Peso desejado (kg)">
-        <TextInput style={s.input} value={data.desired_weight} onChangeText={v => set('desired_weight', v)} placeholder="Ex: 65" placeholderTextColor={colors.subtext} keyboardType="decimal-pad" />
-      </Field>
-
-      <Field label="Prazo esperado (meses)">
-        <TextInput style={s.input} value={data.goal_months} onChangeText={v => set('goal_months', v)} placeholder="Ex: 6" placeholderTextColor={colors.subtext} keyboardType="number-pad" />
       </Field>
     </View>
   )
@@ -490,18 +481,29 @@ function BlocoF({ data, set }: any) {
     <View style={s.block}>
       <Text style={s.blockTitle}>Histórico Fitness</Text>
 
-      <Field label="Experiência com musculação">
+      <Field label="Há quanto tempo treina de forma regular, sem parar mais de 1 mês?">
         <SegmentedControl
           options={[
-            { label: 'Nunca', value: 'never' },
-            { label: '< 6 meses', value: 'less_6mo' },
-            { label: '6m-2a', value: '6mo_2yr' },
-            { label: '2+ anos', value: 'more_2yr' },
+            { label: 'Menos de 1 ano', value: 'less_1yr' },
+            { label: '1-3 anos', value: '1_3yr' },
+            { label: 'Mais de 3 anos', value: '3_plus_yr' },
           ]}
-          value={data.gym_experience}
-          onChange={v => set('gym_experience', v)}
+          value={data.training_time}
+          onChange={v => set('training_time', v)}
         />
       </Field>
+
+      <YesNoField
+        label="Consegue executar agachamento e remada com boa técnica?"
+        value={data.has_good_technique}
+        onChange={v => set('has_good_technique', v)}
+      />
+
+      <YesNoField
+        label="A carga sobe com frequência ou já estacionou faz tempo?"
+        value={data.load_progressing}
+        onChange={v => set('load_progressing', v)}
+      />
 
       <YesNoField
         label="Pratica ou praticou algum esporte?"
@@ -512,18 +514,6 @@ function BlocoF({ data, set }: any) {
           <TextInput style={s.input} value={data.sport_description} onChangeText={v => set('sport_description', v)} placeholder="Qual(is)?" placeholderTextColor={colors.subtext} />
         )}
       </YesNoField>
-
-      <Field label="Nível de experiência">
-        <SegmentedControl
-          options={[
-            { label: 'Iniciante', value: 'beginner' },
-            { label: 'Intermediário', value: 'intermediate' },
-            { label: 'Avançado', value: 'advanced' },
-          ]}
-          value={data.fitness_level}
-          onChange={v => set('fitness_level', v)}
-        />
-      </Field>
     </View>
   )
 }
