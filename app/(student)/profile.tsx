@@ -124,7 +124,6 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.menu}>
-        <MenuItem icon="person-outline" label="Editar Anamnese" onPress={() => router.push('/onboarding/anamnese')} />
         <MenuItem icon="camera-outline" label="Enviar Avaliação" onPress={() => router.push('/(student)/assessment')} />
         <MenuItem icon="trending-up-outline" label="Minha Evolução" onPress={() => router.push('/(student)/evolution')} />
         <MenuItem
