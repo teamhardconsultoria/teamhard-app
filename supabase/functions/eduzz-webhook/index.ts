@@ -5,7 +5,6 @@ const PLAN_MONTHS: Record<string, number> = {
   monthly: 1, quarterly: 3, semiannual: 6, annual: 12,
 }
 
-// Eduzz product codes → plan type
 const PROD_PLAN: Record<string, string> = {
   '60E2D8AKW3': 'quarterly',
   '40QROXQ39B': 'monthly',
@@ -27,24 +26,25 @@ serve(async (req) => {
       return new Response('unauthorized', { status: 401 })
     }
 
-    // Parse body — Eduzz may send form-encoded or JSON
-    let body: Record<string, string>
-    const contentType = req.headers.get('content-type') || ''
-    if (contentType.includes('application/json')) {
-      body = await req.json()
-    } else {
-      const text = await req.text()
-      body = Object.fromEntries(new URLSearchParams(text))
+    const body = await req.json()
+    const event: string = body.event
+    const data = body.data
+
+    if (!event || !data) {
+      return new Response('ignored', { status: 200 })
     }
 
-    const transId = body.trans_id
-    const transStatus = body.trans_status
-    const cusEmail = body.cus_email?.toLowerCase?.()
-    const prodCod = body.prod_cod
-    const transValue = parseFloat(body.trans_value || '0')
-    const paymentMethod = body.trans_paymentmethod || ''
+    if (!event.startsWith('myeduzz.invoice_')) {
+      return new Response('ignored', { status: 200 })
+    }
 
-    if (!transId || !transStatus) {
+    const transId = String(data.id || data.transaction?.id || '')
+    const cusEmail = (data.student?.email || data.buyer?.email)?.toLowerCase?.()
+    const prodCod = data.items?.[0]?.productId
+    const transValue = data.paid?.value || data.price?.value || 0
+    const rawMethod = data.payment?.method || data.paymentMethod || ''
+
+    if (!transId || !cusEmail) {
       return new Response('ignored', { status: 200 })
     }
 
@@ -53,7 +53,6 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    // Find user by email
     const { data: userRow } = await supabase
       .from('users')
       .select('id')
@@ -65,7 +64,6 @@ serve(async (req) => {
       return new Response('user not found', { status: 200 })
     }
 
-    // Find student associated with that user
     const { data: student } = await supabase
       .from('students')
       .select('id, plan_type, plan_end')
@@ -77,15 +75,13 @@ serve(async (req) => {
       return new Response('student not found', { status: 200 })
     }
 
-    // Determine plan type from Eduzz product code, fallback to student's current plan
     const planType = PROD_PLAN[prodCod] || student.plan_type
 
     const methodMap: Record<string, string> = {
-      credit_card: 'Crédito', boleto: 'Boleto', pix: 'PIX', debit_card: 'Débito',
+      creditCard: 'Crédito', boleto: 'Boleto', pix: 'PIX', debitCard: 'Débito',
     }
-    const method = methodMap[paymentMethod.toLowerCase()] || paymentMethod
+    const method = methodMap[rawMethod] || rawMethod
 
-    // Find or create payment record by Eduzz transaction ID
     let { data: dbPayment } = await supabase
       .from('payments')
       .select('id, student_id, plan_type')
@@ -112,7 +108,7 @@ serve(async (req) => {
       return new Response('could not create payment', { status: 200 })
     }
 
-    if (transStatus === 'approved' || transStatus === 'approved_manual') {
+    if (event === 'myeduzz.invoice_paid') {
       await supabase.from('payments').update({
         status: 'paid',
         paid_at: new Date().toISOString(),
@@ -130,11 +126,11 @@ serve(async (req) => {
       }).eq('id', student.id)
     }
 
-    if (transStatus === 'waiting_payment' || transStatus === 'pending') {
-      await supabase.from('payments').update({ status: 'pending' }).eq('id', dbPayment.id)
-    }
-
-    if (transStatus === 'cancelled' || transStatus === 'expired' || transStatus === 'refunded' || transStatus === 'chargeback') {
+    if (
+      event === 'myeduzz.invoice_canceled' ||
+      event === 'myeduzz.invoice_refunded' ||
+      event === 'myeduzz.invoice_chargeback'
+    ) {
       await supabase.from('payments').update({ status: 'refunded' }).eq('id', dbPayment.id)
     }
 

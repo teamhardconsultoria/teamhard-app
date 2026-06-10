@@ -17,8 +17,11 @@ interface DashStats {
   updatesTodayStudents: Student[]
   paymentsToday: number
   payments7days: number
+  totalStudents: number
   activeStudents: number
   activeStudentsList: Student[]
+  blockedStudents: number
+  blockedStudentsList: Student[]
 
   birthdays: Student[]
   unreadFeedbacks: number
