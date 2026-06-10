@@ -89,10 +89,14 @@ serve(async (req) => {
     }
 
     const maxPayments = MAX_PAYMENTS[planType] || 0
+    // value = valor por ciclo mensal; divide o total pelas parcelas para obter o valor mensal correto
+    const monthlyValue = maxPayments > 0
+      ? parseFloat((parseFloat(amount) / maxPayments).toFixed(2))
+      : parseFloat(amount)
     const subscriptionPayload: Record<string, unknown> = {
       customer: customerId,
       billingType: billing_type,
-      value: parseFloat(amount),
+      value: monthlyValue,
       nextDueDate: due_date,
       cycle: 'MONTHLY',
       description: `Plano ${PLAN_LABEL[planType] || planType} - Team Hard`,
@@ -123,7 +127,7 @@ serve(async (req) => {
       body: {
         user_id: user.id,
         title: '💳 Assinatura criada',
-        body: `Sua assinatura ${PLAN_LABEL[planType] || planType} de R$ ${parseFloat(amount).toFixed(2).replace('.', ',')} por mês foi configurada.`,
+        body: `Sua assinatura ${PLAN_LABEL[planType] || planType} de R$ ${monthlyValue.toFixed(2).replace('.', ',')} por mês foi configurada.`,
         data: { screen: '/(student)/payments' },
       },
     })
