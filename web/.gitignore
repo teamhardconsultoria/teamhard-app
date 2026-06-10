@@ -34,3 +34,6 @@ pnpm-debug.log*
 Thumbs.db
 
 .vercel
+
+# Credenciais e códigos de recuperação
+recovery-codes.txt

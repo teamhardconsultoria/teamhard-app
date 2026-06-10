@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Timer, Pause, Play, ChevronLeft, ChevronRight, Flag, Zap } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
+import { subscribeWebPush, scheduleRestNotification, invalidateRestNonce } from '../../lib/webpush'
 
 interface SetRecord {
   exerciseId: string
@@ -35,6 +36,18 @@ function formatTime(s: number) {
   return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
 }
 
+function postToSW(msg: object) {
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage(msg)
+  }
+}
+
+async function requestNotifPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    await Notification.requestPermission()
+  }
+}
+
 function playBeep() {
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -65,6 +78,9 @@ export default function StudentWorkoutExecute() {
 
   const restEndAtRef = useRef<number | null>(null)
   const restFiredRef = useRef(false)
+  const restExerciseNameRef = useRef('')
+  const studentIdRef = useRef<string | null>(null)
+  const restNonceRef = useRef<string | null>(null)
   const isPausedRef = useRef(false)
   const pausedAtRef = useRef<number | null>(null)
   const totalPausedMsRef = useRef(0)
@@ -88,6 +104,7 @@ export default function StudentWorkoutExecute() {
 
   useEffect(() => {
     const init = async () => {
+      requestNotifPermission()
       const { data: day } = await supabase
         .from('workout_days')
         .select('exercises:workout_exercises(*, exercise:exercises(*))')
@@ -110,6 +127,10 @@ export default function StudentWorkoutExecute() {
       setSets(initialSets)
 
       const { data: student } = await supabase.from('students').select('id').eq('user_id', user!.id).single()
+      if (student?.id) {
+        studentIdRef.current = student.id
+        subscribeWebPush(user!.id)
+      }
       const { data: sess } = await supabase.from('training_sessions').insert({
         student_id: student!.id,
         workout_day_id: dayId,
@@ -139,6 +160,13 @@ export default function StudentWorkoutExecute() {
     return Math.max(0, Math.floor((n - baseTime - totalPausedMsRef.current - currentPauseMs) / 1000))
   }
 
+  const cancelServerTimer = useCallback(() => {
+    if (!studentIdRef.current) return
+    const nonce = crypto.randomUUID()
+    restNonceRef.current = nonce
+    invalidateRestNonce(studentIdRef.current, nonce)
+  }, [])
+
   const handlePauseResume = () => {
     if (isPausedRef.current) {
       if (pausedAtRef.current) {
@@ -146,9 +174,11 @@ export default function StudentWorkoutExecute() {
         pausedAtRef.current = null
       }
       if (restRemainingAtPauseRef.current !== null) {
-        restEndAtRef.current = Date.now() + restRemainingAtPauseRef.current
+        const remainingMs = restRemainingAtPauseRef.current
+        restEndAtRef.current = Date.now() + remainingMs
         restRemainingAtPauseRef.current = null
         restFiredRef.current = false
+        postToSW({ type: 'START_REST_TIMER', ms: remainingMs, exerciseName: restExerciseNameRef.current })
       }
       isPausedRef.current = false
       setIsPaused(false)
@@ -158,6 +188,8 @@ export default function StudentWorkoutExecute() {
       if (restEndAtRef.current) {
         restRemainingAtPauseRef.current = Math.max(0, restEndAtRef.current - Date.now())
         restEndAtRef.current = null
+        postToSW({ type: 'CANCEL_REST_TIMER' })
+        cancelServerTimer()
       }
       isPausedRef.current = true
       setIsPaused(true)
@@ -165,9 +197,19 @@ export default function StudentWorkoutExecute() {
     }
   }
 
-  const startRestTimer = useCallback((seconds: number) => {
+  const startRestTimer = useCallback((seconds: number, exerciseName = '') => {
     restFiredRef.current = false
     restEndAtRef.current = Date.now() + seconds * 1000
+    restExerciseNameRef.current = exerciseName
+    postToSW({ type: 'START_REST_TIMER', ms: seconds * 1000, exerciseName })
+
+    // Push via servidor (funciona com tela desligada)
+    if (studentIdRef.current) {
+      const nonce = crypto.randomUUID()
+      restNonceRef.current = nonce
+      invalidateRestNonce(studentIdRef.current, nonce)
+      scheduleRestNotification(studentIdRef.current, exerciseName, seconds, nonce)
+    }
   }, [])
 
   const completeSet = (exerciseId: string, setNumber: number) => {
@@ -176,7 +218,7 @@ export default function StudentWorkoutExecute() {
       s.exerciseId === exerciseId && s.setNumber === setNumber ? { ...s, completed: true } : s
     ))
     const ex = exercises.find(e => e.exercise_id === exerciseId)
-    startRestTimer(ex?.rest_seconds || 60)
+    startRestTimer(ex?.rest_seconds || 60, ex?.exercise?.name || '')
   }
 
   const uncompleteSet = (exerciseId: string, setNumber: number) => {
@@ -196,6 +238,8 @@ export default function StudentWorkoutExecute() {
     if (!session) return
     if (!window.confirm('Finalizar o treino agora?')) return
     if (tickRef.current) clearInterval(tickRef.current)
+    postToSW({ type: 'CANCEL_REST_TIMER' })
+    cancelServerTimer()
     const duration = getEffectiveDuration()
 
     await supabase.from('training_sessions').update({
@@ -315,7 +359,7 @@ export default function StudentWorkoutExecute() {
         <div style={{ display:'flex', alignItems:'center', gap:8, backgroundColor:'rgba(232,255,0,0.07)', borderBottom:'1px solid rgba(232,255,0,0.2)', padding:'10px 20px', flexShrink:0 }}>
           <Timer size={16} color="#E8FF00" />
           <span style={{ flex:1, fontSize:14, color:'#E8FF00', fontWeight:700 }}>Descanso: {restRemaining}s</span>
-          <button onClick={() => { restFiredRef.current = true; restEndAtRef.current = null; forceUpdate(n => n + 1) }}
+          <button onClick={() => { restFiredRef.current = true; restEndAtRef.current = null; postToSW({ type: 'CANCEL_REST_TIMER' }); cancelServerTimer(); forceUpdate(n => n + 1) }}
             style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, color:'var(--text-2)', fontWeight:600 }}>Pular</button>
         </div>
       )}
