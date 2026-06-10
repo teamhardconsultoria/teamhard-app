@@ -178,9 +178,13 @@ export default function Dashboard() {
       .filter((s: any) => updateTodayIds.has(s.id))
       .map((s: any) => ({ id: s.id, name: (s.user as any)?.name || '?' }))
 
-    // Alunos ativos
+    // Alunos ativos e bloqueados
     const activeStudentsList: Student[] = list
       .filter(s => s.payment_status === 'active')
+      .map((s: any) => ({ id: s.id, name: (s.user as any)?.name || '?' }))
+
+    const blockedStudentsList: Student[] = list
+      .filter((s: any) => s.access_blocked)
       .map((s: any) => ({ id: s.id, name: (s.user as any)?.name || '?' }))
 
     setStats({
@@ -189,8 +193,11 @@ export default function Dashboard() {
       updatesTodayStudents,
       paymentsToday: paymentsTodayRes.count ?? 0,
       payments7days: payments7daysRes.count ?? 0,
+      totalStudents: list.length,
       activeStudents: activeStudentsList.length,
       activeStudentsList,
+      blockedStudents: blockedStudentsList.length,
+      blockedStudentsList,
 
       birthdays,
       unreadFeedbacks: feedbacksRes.count ?? 0,
