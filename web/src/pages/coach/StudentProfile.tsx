@@ -28,10 +28,6 @@ interface EditForm {
   plan_type: string
   payment_status: string
   plan_end: string
-  biological_sex: string
-  current_weight: string
-  height: string
-  birth_date: string
 }
 
 const PLAN_LABELS: Record<string, string> = {
@@ -69,7 +65,6 @@ export default function StudentProfile() {
   const [showEdit, setShowEdit] = useState(false)
   const [editForm, setEditForm] = useState<EditForm>({
     name: '', phone: '', plan_type: '', payment_status: '', plan_end: '',
-    biological_sex: '', current_weight: '', height: '', birth_date: '',
   })
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
@@ -134,10 +129,6 @@ export default function StudentProfile() {
       plan_type: student.plan_type,
       payment_status: student.payment_status,
       plan_end: student.plan_end,
-      biological_sex: a?.biological_sex ?? '',
-      current_weight: a?.current_weight?.toString() ?? '',
-      height: a?.height?.toString() ?? '',
-      birth_date: a?.birth_date ?? '',
     })
     setEditError('')
     setShowEdit(true)
@@ -145,7 +136,6 @@ export default function StudentProfile() {
 
   const handleSaveEdit = async () => {
     if (!student || !editForm.name.trim()) { setEditError('O nome não pode estar vazio.'); return }
-    if (!editForm.birth_date) { setEditError('A data de nascimento é obrigatória.'); return }
     setEditSaving(true)
     setEditError('')
 
@@ -161,17 +151,6 @@ export default function StudentProfile() {
       plan_end: editForm.plan_end,
     }).eq('id', student.id)
     if (studentErr) { setEditError(studentErr.message); setEditSaving(false); return }
-
-    const anamnesePayload: Record<string, any> = {
-      student_id: student.id,
-      full_name: editForm.name.trim(),
-      birth_date: editForm.birth_date || null,
-      biological_sex: editForm.biological_sex || null,
-      current_weight: editForm.current_weight ? parseFloat(editForm.current_weight) : null,
-      height: editForm.height ? parseFloat(editForm.height) : null,
-    }
-    const { error: anamneseErr } = await supabase.from('anamnese').upsert(anamnesePayload, { onConflict: 'student_id' })
-    if (anamneseErr) { setEditError(anamneseErr.message); setEditSaving(false); return }
 
     setEditSaving(false)
     setShowEdit(false)
@@ -430,28 +409,6 @@ export default function StudentProfile() {
                 </EditField>
               </EditSection>
 
-              {/* Dados físicos */}
-              <EditSection label="Dados Físicos">
-                <EditField label="Data de nascimento *">
-                  <EditInput type="date" value={editForm.birth_date} onChange={v => setEditForm(p => ({ ...p, birth_date: v }))} />
-                </EditField>
-                <EditField label="Sexo biológico">
-                  <select value={editForm.biological_sex} onChange={e => setEditForm(p => ({ ...p, biological_sex: e.target.value }))}
-                    style={{ width: '100%', padding: '10px 12px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)', fontSize: 14, outline: 'none' }}>
-                    <option value="">Selecionar…</option>
-                    <option value="male">Masculino</option>
-                    <option value="female">Feminino</option>
-                  </select>
-                </EditField>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <EditField label="Peso atual (kg)">
-                    <EditInput type="number" value={editForm.current_weight} onChange={v => setEditForm(p => ({ ...p, current_weight: v }))} placeholder="Ex: 70.5" step="0.1" min="30" max="250" />
-                  </EditField>
-                  <EditField label="Altura (cm)">
-                    <EditInput type="number" value={editForm.height} onChange={v => setEditForm(p => ({ ...p, height: v }))} placeholder="Ex: 175" step="1" min="100" max="250" />
-                  </EditField>
-                </div>
-              </EditSection>
 
               {editError && (
                 <p style={{ color: '#FF4444', fontSize: 13, margin: 0, padding: '8px 12px', backgroundColor: 'rgba(255,68,68,0.08)', borderRadius: 8, border: '1px solid rgba(255,68,68,0.2)' }}>
