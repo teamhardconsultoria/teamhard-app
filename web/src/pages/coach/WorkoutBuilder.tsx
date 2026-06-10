@@ -34,6 +34,7 @@ export default function WorkoutBuilder() {
 
   const [studentName, setStudentName] = useState('')
   const [workoutName, setWorkoutName] = useState('')
+  const [periodization, setPeriodization] = useState('')
   const [validFrom, setValidFrom] = useState(new Date().toISOString().split('T')[0])
   const [validTo, setValidTo] = useState('')
   const [days, setDays] = useState<WorkoutDay[]>([{ name: 'A', weekday_suggestion: [], exercises: [], cardio: [], collapsed: false }])
@@ -60,7 +61,7 @@ export default function WorkoutBuilder() {
 
   const fetchWorkout = async () => {
     const { data: w } = await supabase.from('workouts').select(`
-      id, name, valid_from, valid_to,
+      id, name, periodization, valid_from, valid_to,
       days:workout_days(id, name, weekday_suggestion, sort_order,
         exercises:workout_exercises(exercise_id, sets, reps, rest_seconds, coach_notes, sort_order,
           exercise:exercises(id, name, muscle_groups, youtube_url, equipment)),
@@ -68,6 +69,7 @@ export default function WorkoutBuilder() {
     `).eq('id', workoutId!).single()
     if (!w) return
     setWorkoutName(w.name)
+    setPeriodization((w as any).periodization || '')
     setValidFrom(w.valid_from)
     setValidTo(w.valid_to)
     const loadedDays: WorkoutDay[] = (w.days as any[])
@@ -173,7 +175,7 @@ export default function WorkoutBuilder() {
       const { data: coach } = await supabase.from('coaches').select('id').eq('user_id', user!.id).single()
 
       if (isEditing) {
-        await supabase.from('workouts').update({ name: workoutName.trim(), valid_from: validFrom, valid_to: validTo }).eq('id', workoutId!)
+        await supabase.from('workouts').update({ name: workoutName.trim(), periodization: periodization || null, valid_from: validFrom, valid_to: validTo }).eq('id', workoutId!)
 
         const currentIds = days.filter(d => d.id).map(d => d.id!)
         const removedIds = originalDayIds.filter(id => !currentIds.includes(id))
@@ -204,7 +206,7 @@ export default function WorkoutBuilder() {
         await supabase.from('activity_logs').insert({ coach_id: coach!.id, action_type: 'updated_workout', target_student_id: studentId, details: { workout_name: workoutName } })
       } else {
         await supabase.from('workouts').update({ active: false }).eq('student_id', studentId).eq('active', true)
-        const { data: workout } = await supabase.from('workouts').insert({ student_id: studentId, coach_id: coach!.id, name: workoutName.trim(), valid_from: validFrom, valid_to: validTo, active: true }).select().single()
+        const { data: workout } = await supabase.from('workouts').insert({ student_id: studentId, coach_id: coach!.id, name: workoutName.trim(), periodization: periodization || null, valid_from: validFrom, valid_to: validTo, active: true }).select().single()
         for (const [di, day] of days.entries()) {
           const { data: wd } = await supabase.from('workout_days').insert({ workout_id: workout!.id, name: day.name, weekday_suggestion: day.weekday_suggestion, sort_order: di }).select().single()
           if (day.exercises.length > 0)
@@ -244,6 +246,18 @@ export default function WorkoutBuilder() {
             <label style={lbl}>Nome do Treino *</label>
             <input type="text" value={workoutName} onChange={e => setWorkoutName(e.target.value)} placeholder="Ex: Treino ABC — Hipertrofia" style={inp()}
               onFocus={e => (e.currentTarget.style.borderColor = '#E8FF00')} onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')} />
+          </div>
+          <div>
+            <label style={lbl}>Tipo de Periodização</label>
+            <select value={periodization} onChange={e => setPeriodization(e.target.value)}
+              style={{ ...inp(), colorScheme: 'dark' }}
+              onFocus={e => (e.currentTarget.style.borderColor = '#E8FF00')} onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}>
+              <option value="">Selecionar…</option>
+              <option value="linear">Periodização Linear</option>
+              <option value="daily_undulating">Periodização Ondulatória Diária</option>
+              <option value="block">Periodização em Blocos</option>
+              <option value="weekly_undulating">Periodização Ondulatória Semanal</option>
+            </select>
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
