@@ -7,6 +7,7 @@ type QuestionType = 'text' | 'number' | 'scale' | 'single' | 'multiple' | 'date'
 interface Question { id: string; type: QuestionType; text: string; required: boolean; options?: string[] }
 interface Questionnaire { id: string; title: string; questions: Question[]; created_at: string; assignmentCount: number; responseCount: number }
 interface Response { id: string; student_id: string; studentName: string; answers: Record<string, any>; submitted_at: string }
+interface PendingStudent { id: string; name: string }
 interface Student { id: string; name: string }
 
 interface AnamneseRecord {
@@ -40,6 +41,8 @@ export default function Questionnaires() {
   const [loadingResponses, setLoadingResponses] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [showSend, setShowSend] = useState(false)
+  const [sendToStudentId, setSendToStudentId] = useState<string | null>(null)
+  const [pendingStudents, setPendingStudents] = useState<PendingStudent[]>([])
   const [expandedResponses, setExpandedResponses] = useState<Record<string, boolean>>({})
   const [showAnamnese, setShowAnamnese] = useState(false)
   const [anamneseList, setAnamneseList] = useState<AnamneseRecord[]>([])
@@ -97,9 +100,14 @@ export default function Questionnaires() {
   }
 
   const selectQuestionnaire = async (q: Questionnaire) => {
-    setShowAnamnese(false); setSelected(q); setExpandedResponses({}); setLoadingResponses(true)
-    const { data } = await supabase.from('questionnaire_responses').select('id, student_id, answers, submitted_at, student:students(user:users(name))').eq('questionnaire_id', q.id).order('submitted_at', { ascending: false })
-    setResponses((data || []).map((r: any) => ({ id: r.id, student_id: r.student_id, studentName: r.student?.user?.name || '?', answers: r.answers, submitted_at: r.submitted_at })))
+    setShowAnamnese(false); setSelected(q); setExpandedResponses({}); setLoadingResponses(true); setPendingStudents([])
+    const [respRes, assignRes] = await Promise.all([
+      supabase.from('questionnaire_responses').select('id, student_id, answers, submitted_at, student:students(user:users(name))').eq('questionnaire_id', q.id).order('submitted_at', { ascending: false }),
+      supabase.from('questionnaire_assignments').select('student_id, student:students(user:users(name))').eq('questionnaire_id', q.id),
+    ])
+    const respondedIds = new Set((respRes.data || []).map((r: any) => r.student_id))
+    setResponses((respRes.data || []).map((r: any) => ({ id: r.id, student_id: r.student_id, studentName: r.student?.user?.name || '?', answers: r.answers, submitted_at: r.submitted_at })))
+    setPendingStudents((assignRes.data || []).filter((a: any) => !respondedIds.has(a.student_id)).map((a: any) => ({ id: a.student_id, name: a.student?.user?.name || '?' })))
     setLoadingResponses(false)
   }
 
@@ -185,7 +193,7 @@ export default function Questionnaires() {
               <p style={{ fontSize:12, color:'#888', margin:0 }}>{selected.questions.length} perguntas · {selected.assignmentCount} enviado{selected.assignmentCount !== 1 ? 's' : ''} · {selected.responseCount} resposta{selected.responseCount !== 1 ? 's' : ''}</p>
             </div>
             <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-              <button onClick={() => setShowSend(true)} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 12px', backgroundColor:'#E8FF00', color:'#0A0A0A', borderRadius:8, border:'none', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+              <button onClick={() => { setSendToStudentId(null); setShowSend(true) }} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 12px', backgroundColor:'#E8FF00', color:'#0A0A0A', borderRadius:8, border:'none', fontSize:12, fontWeight:700, cursor:'pointer' }}>
                 <Send size={12} /> Enviar
               </button>
               <button onClick={() => deleteQuestionnaire(selected.id)} style={{ padding:7, color:'#888', background:'none', border:'none', cursor:'pointer', borderRadius:8 }}
@@ -231,6 +239,27 @@ export default function Questionnaires() {
                 ))}
               </div>
             </div>
+
+            {/* Alunos aguardando */}
+            {pendingStudents.length > 0 && (
+              <div style={{ maxWidth:640, marginBottom:32 }}>
+                <p style={{ ...labelStyle, margin:'0 0 12px 0' }}>Aguardando resposta ({pendingStudents.length})</p>
+                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                  {pendingStudents.map(s => (
+                    <div key={s.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 16px', backgroundColor:'#111', border:'1px solid var(--border)', borderRadius:10 }}>
+                      <div style={{ width:32, height:32, borderRadius:16, backgroundColor:'rgba(255,152,0,0.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, color:'#FF9800', flexShrink:0 }}>{s.name.charAt(0)}</div>
+                      <span style={{ flex:1, fontSize:13, fontWeight:600, color:'#fff' }}>{s.name}</span>
+                      <button onClick={() => { setSendToStudentId(s.id); setShowSend(true) }}
+                        style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', backgroundColor:'rgba(232,255,0,0.1)', border:'1px solid rgba(232,255,0,0.3)', borderRadius:7, color:'#E8FF00', fontSize:12, fontWeight:700, cursor:'pointer' }}
+                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(232,255,0,0.18)')}
+                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(232,255,0,0.1)')}>
+                        <Send size={11} /> Enviar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Respostas */}
             <div style={{ maxWidth:640 }}>
@@ -294,8 +323,8 @@ export default function Questionnaires() {
         <CreateModal coachId={coachId} onClose={() => setShowCreate(false)} onSaved={async () => { setShowCreate(false); if (coachId) await loadQuestionnaires(coachId) }} />
       )}
       {showSend && selected && (
-        <SendModal questionnaire={selected} students={students} onClose={() => setShowSend(false)}
-          onSent={async () => { setShowSend(false); if (coachId) await loadQuestionnaires(coachId); if (selected) await selectQuestionnaire(selected) }} />
+        <SendModal questionnaire={selected} students={students} defaultStudentId={sendToStudentId} onClose={() => { setShowSend(false); setSendToStudentId(null) }}
+          onSent={async () => { setShowSend(false); setSendToStudentId(null); if (coachId) await loadQuestionnaires(coachId); if (selected) await selectQuestionnaire(selected) }} />
       )}
     </div>
   )
@@ -516,8 +545,8 @@ function CreateModal({ coachId, onClose, onSaved }: { coachId:string; onClose:()
   )
 }
 
-function SendModal({ questionnaire, students, onClose, onSent }: { questionnaire:Questionnaire; students:Student[]; onClose:()=>void; onSent:()=>void }) {
-  const [studentId, setStudentId] = useState('')
+function SendModal({ questionnaire, students, defaultStudentId, onClose, onSent }: { questionnaire:Questionnaire; students:Student[]; defaultStudentId?:string|null; onClose:()=>void; onSent:()=>void }) {
+  const [studentId, setStudentId] = useState(defaultStudentId || '')
   const [dueDate, setDueDate] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
