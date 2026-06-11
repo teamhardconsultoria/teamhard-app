@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Dumbbell, Salad, MessageSquare, CreditCard, UserCircle, History, LogOut, Sun, Moon, Menu, X } from 'lucide-react'
+import { LayoutDashboard, Dumbbell, Salad, MessageSquare, CreditCard, UserCircle, History, LogOut, Sun, Moon, Menu, X, Scale } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '../../store/auth'
 import { getTheme, toggleTheme } from '../../store/theme'
@@ -41,13 +41,14 @@ export default function StudentLayout() {
   }, [location.pathname])
 
   const navItems = [
-    { to: '/student/home',     icon: LayoutDashboard, label: 'Início'      },
-    { to: '/student/workout',  icon: Dumbbell,        label: 'Treino'      },
-    { to: '/student/diet',     icon: Salad,           label: 'Dieta'       },
-    { to: '/student/chat',     icon: MessageSquare,   label: 'Chat',    badge: unread },
-    { to: '/student/payments', icon: CreditCard,      label: 'Pagamentos'  },
-    { to: '/student/sessions', icon: History,         label: 'Histórico'   },
-    { to: '/student/profile',  icon: UserCircle,      label: 'Perfil'      },
+    { to: '/student/home',        icon: LayoutDashboard, label: 'Início'      },
+    { to: '/student/workout',     icon: Dumbbell,        label: 'Treino'      },
+    { to: '/student/diet',        icon: Salad,           label: 'Dieta'       },
+    { to: '/student/chat',        icon: MessageSquare,   label: 'Chat',    badge: unread },
+    { to: '/student/assessments', icon: Scale,           label: 'Avaliação'   },
+    { to: '/student/payments',    icon: CreditCard,      label: 'Pagamentos'  },
+    { to: '/student/sessions',    icon: History,         label: 'Histórico'   },
+    { to: '/student/profile',     icon: UserCircle,      label: 'Perfil'      },
   ]
 
   if (isMobile) {

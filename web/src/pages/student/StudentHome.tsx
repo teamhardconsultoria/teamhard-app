@@ -129,15 +129,29 @@ export default function StudentHome() {
         )}
 
         {/* Última avaliação */}
-        {data.lastAssessment && (
-          <div style={{ backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:14, padding:16 }}>
-            <p style={{ fontSize:11, fontWeight:700, color:'var(--text-2)', textTransform:'uppercase', letterSpacing:1, margin:'0 0 12px' }}>Última Avaliação</p>
+        {data.lastAssessment ? (
+          <button onClick={() => navigate('/student/assessments')}
+            style={{ width:'100%', backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:14, padding:16, cursor:'pointer', textAlign:'left' }}
+            onMouseEnter={e => (e.currentTarget.style.borderColor = '#E8FF00')}
+            onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
+              <p style={{ fontSize:11, fontWeight:700, color:'var(--text-2)', textTransform:'uppercase', letterSpacing:1, margin:0 }}>Última Avaliação</p>
+              <span style={{ color:'var(--text-3)', fontSize:18 }}>›</span>
+            </div>
             <div style={{ display:'flex', gap:24 }}>
               <StatItem label="Peso" value={`${data.lastAssessment.weight} kg`} />
               {data.lastAssessment.body_fat_pct && <StatItem label="% Gordura" value={`${data.lastAssessment.body_fat_pct}%`} />}
               <StatItem label="Data" value={new Date(data.lastAssessment.created_at).toLocaleDateString('pt-BR')} />
             </div>
-          </div>
+          </button>
+        ) : (
+          <button onClick={() => navigate('/student/assessments')}
+            style={{ width:'100%', backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:14, padding:16, cursor:'pointer', textAlign:'left' }}
+            onMouseEnter={e => (e.currentTarget.style.borderColor = '#E8FF00')}
+            onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}>
+            <p style={{ fontSize:11, fontWeight:700, color:'var(--text-2)', textTransform:'uppercase', letterSpacing:1, margin:'0 0 8px' }}>Avaliação</p>
+            <p style={{ fontSize:14, color:'var(--text-2)', margin:0 }}>Enviar avaliação para o coach →</p>
+          </button>
         )}
       </div>
     </div>
