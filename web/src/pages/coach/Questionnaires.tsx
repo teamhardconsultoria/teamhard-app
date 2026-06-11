@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Plus, X, Trash2, Send, FileText, ChevronDown, ChevronUp, Check, ClipboardList, AlertCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
@@ -32,6 +33,7 @@ const labelStyle = { fontSize:11, color:'#888', textTransform:'uppercase' as con
 
 export default function Questionnaires() {
   const { user } = useAuthStore()
+  const navigate = useNavigate()
   const [coachId, setCoachId] = useState<string | null>(null)
   const [questionnaires, setQuestionnaires] = useState<Questionnaire[]>([])
   const [selected, setSelected] = useState<Questionnaire | null>(null)
@@ -179,7 +181,8 @@ export default function Questionnaires() {
                 {anamneseList.map(a => (
                   <AnamneseCard key={a.studentId} record={a}
                     expanded={!!expandedAnamnese[a.studentId]}
-                    onToggle={() => setExpandedAnamnese(p => ({ ...p, [a.studentId]: !p[a.studentId] }))} />
+                    onToggle={() => setExpandedAnamnese(p => ({ ...p, [a.studentId]: !p[a.studentId] }))}
+                    onSend={() => navigate(`/coach/chat/${a.studentId}`)} />
                 ))}
               </div>
             )}
@@ -330,7 +333,7 @@ export default function Questionnaires() {
   )
 }
 
-function AnamneseCard({ record, expanded, onToggle }: { record: AnamneseRecord; expanded: boolean; onToggle: () => void }) {
+function AnamneseCard({ record, expanded, onToggle, onSend }: { record: AnamneseRecord; expanded: boolean; onToggle: () => void; onSend: () => void }) {
   const a = record.data
   const age = a?.birth_date ? Math.floor((Date.now() - new Date(a.birth_date).getTime()) / (365.25 * 24 * 3600 * 1000)) : null
 
@@ -348,7 +351,12 @@ function AnamneseCard({ record, expanded, onToggle }: { record: AnamneseRecord; 
           </p>
         </div>
         {!a ? (
-          <AlertCircle size={14} color="#FF9800" style={{ flexShrink:0 }} />
+          <button onClick={e => { e.stopPropagation(); onSend() }}
+            style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 10px', backgroundColor:'rgba(232,255,0,0.1)', border:'1px solid rgba(232,255,0,0.3)', borderRadius:7, color:'#E8FF00', fontSize:11, fontWeight:700, cursor:'pointer', flexShrink:0 }}
+            onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(232,255,0,0.18)')}
+            onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(232,255,0,0.1)')}>
+            <Send size={11} /> Enviar
+          </button>
         ) : record.completed ? (
           <span style={{ fontSize:10, fontWeight:700, backgroundColor:'rgba(0,200,83,0.1)', color:'#00C853', padding:'2px 8px', borderRadius:20, flexShrink:0 }}>Completa</span>
         ) : (
