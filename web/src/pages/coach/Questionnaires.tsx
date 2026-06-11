@@ -339,19 +339,19 @@ function AnamneseCard({ record, expanded, onToggle, onSend }: { record: Anamnese
 
   return (
     <div style={{ backgroundColor:'#111', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden' }}>
-      <button onClick={onToggle} style={{ width:'100%', display:'flex', alignItems:'center', gap:12, padding:'12px 16px', background:'none', border:'none', cursor:'pointer', textAlign:'left' }}
+      <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px' }}
         onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#161616')} onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
         <div style={{ width:36, height:36, borderRadius:18, backgroundColor:'#E8FF00', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:900, color:'#0A0A0A', flexShrink:0 }}>
           {record.studentName.charAt(0)}
         </div>
-        <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ flex:1, minWidth:0, cursor:'pointer' }} onClick={onToggle}>
           <p style={{ fontSize:13, fontWeight:700, color:'#fff', margin:0 }}>{record.studentName}</p>
           <p style={{ fontSize:11, color:'#888', margin:'2px 0 0 0' }}>
             {!a ? 'Não preenchida' : `${GOAL_LBL[a.goal] || a.goal}${age ? ` · ${age} anos` : ''}${a.fitness_level ? ` · ${FITNESS_LBL[a.fitness_level] || a.fitness_level}` : ''}`}
           </p>
         </div>
         {!a ? (
-          <button onClick={e => { e.stopPropagation(); onSend() }}
+          <button onClick={onSend}
             style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 10px', backgroundColor:'rgba(232,255,0,0.1)', border:'1px solid rgba(232,255,0,0.3)', borderRadius:7, color:'#E8FF00', fontSize:11, fontWeight:700, cursor:'pointer', flexShrink:0 }}
             onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(232,255,0,0.18)')}
             onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(232,255,0,0.1)')}>
@@ -362,8 +362,10 @@ function AnamneseCard({ record, expanded, onToggle, onSend }: { record: Anamnese
         ) : (
           <span style={{ fontSize:10, fontWeight:700, backgroundColor:'rgba(255,152,0,0.1)', color:'#FF9800', padding:'2px 8px', borderRadius:20, flexShrink:0 }}>Parcial</span>
         )}
-        {expanded ? <ChevronUp size={14} color="#888" style={{ flexShrink:0 }} /> : <ChevronDown size={14} color="#888" style={{ flexShrink:0 }} />}
-      </button>
+        <div onClick={onToggle} style={{ cursor:'pointer', flexShrink:0 }}>
+          {expanded ? <ChevronUp size={14} color="#888" /> : <ChevronDown size={14} color="#888" />}
+        </div>
+      </div>
 
       {expanded && a && (
         <div style={{ borderTop:'1px solid var(--border)', padding:16, display:'flex', flexDirection:'column', gap:16 }}>
