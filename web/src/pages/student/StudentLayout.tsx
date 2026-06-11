@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Dumbbell, Salad, MessageSquare, CreditCard, UserCircle, History, LogOut, Sun, Moon, Menu, X, Scale, ClipboardList } from 'lucide-react'
+import { LayoutDashboard, Dumbbell, Salad, MessageSquare, CreditCard, UserCircle, History, LogOut, Sun, Moon, Menu, X, Scale, ClipboardList, ClipboardCheck } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '../../store/auth'
 import { getTheme, toggleTheme } from '../../store/theme'
@@ -46,7 +46,8 @@ export default function StudentLayout() {
     { to: '/student/diet',        icon: Salad,           label: 'Dieta'       },
     { to: '/student/chat',        icon: MessageSquare,   label: 'Chat',    badge: unread },
     { to: '/student/assessments',    icon: Scale,          label: 'Avaliação'     },
-    { to: '/student/questionnaires', icon: ClipboardList, label: 'Questionários' },
+    { to: '/student/questionnaires', icon: ClipboardList,  label: 'Questionários' },
+    { to: '/student/anamnese',       icon: ClipboardCheck, label: 'Anamnese'      },
     { to: '/student/payments',       icon: CreditCard,    label: 'Pagamentos'    },
     { to: '/student/sessions',    icon: History,         label: 'Histórico'   },
     { to: '/student/profile',     icon: UserCircle,      label: 'Perfil'      },
