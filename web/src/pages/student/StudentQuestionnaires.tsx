@@ -46,7 +46,7 @@ export default function StudentQuestionnaires() {
     ])
 
     const responseMap = new Map((respRes.data || []).map((r: any) => [r.questionnaire_id, r]))
-    const assignments = (assignRes.data || []) as Assignment[]
+    const assignments = (assignRes.data || []) as unknown as Assignment[]
 
     setPending(assignments.filter(a => !responseMap.has(a.questionnaire_id)))
     setCompleted(
