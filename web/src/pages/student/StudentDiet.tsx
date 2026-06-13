@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight as ChevronRightIcon, Salad, CheckCircle2 } from 'lucide-react'
+import { useEffect, useState, useRef } from 'react'
+import { ChevronLeft, ChevronRight as ChevronRightIcon, Salad, CheckCircle2, Camera, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -25,6 +25,11 @@ export default function StudentDiet() {
   const [checks, setChecks] = useState<Record<string, boolean>>({})
   const [finalized, setFinalized] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  // Fotos de refeição
+  const [mealPhotos, setMealPhotos] = useState<Record<string, string>>({})
+  const [uploadingMeals, setUploadingMeals] = useState<Set<string>>(new Set())
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   useEffect(() => { load() }, [])
 
@@ -57,6 +62,7 @@ export default function StudentDiet() {
     setChecks({})
     setFinalized(false)
     setDietLog(null)
+    setMealPhotos({})
 
     let { data: log } = await supabase
       .from('diet_logs').select('id, finalized_at')
@@ -74,11 +80,18 @@ export default function StudentDiet() {
     setDietLog(log)
     setFinalized(!!log.finalized_at)
 
-    const { data: foodChecks } = await supabase
-      .from('food_checks').select('meal_food_id, checked').eq('diet_log_id', log.id)
-    const map: Record<string, boolean> = {}
-    foodChecks?.forEach((fc: any) => { map[fc.meal_food_id] = fc.checked })
-    setChecks(map)
+    const [{ data: foodChecks }, { data: photos }] = await Promise.all([
+      supabase.from('food_checks').select('meal_food_id, checked').eq('diet_log_id', log.id),
+      supabase.from('meal_photos').select('meal_id, photo_url').eq('diet_log_id', log.id),
+    ])
+
+    const checkMap: Record<string, boolean> = {}
+    foodChecks?.forEach((fc: any) => { checkMap[fc.meal_food_id] = fc.checked })
+    setChecks(checkMap)
+
+    const photoMap: Record<string, string> = {}
+    photos?.forEach((p: any) => { photoMap[p.meal_id] = p.photo_url })
+    setMealPhotos(photoMap)
   }
 
   const handleDayChange = async (idx: number) => {
@@ -98,6 +111,40 @@ export default function StudentDiet() {
       checked: newVal,
       checked_at: newVal ? new Date().toISOString() : null,
     }, { onConflict: 'diet_log_id,meal_food_id' })
+  }
+
+  const handleMealPhoto = async (mealId: string, file: File) => {
+    if (!dietLog || !studentId) return
+    setUploadingMeals(prev => new Set([...prev, mealId]))
+
+    const path = `meals/${studentId}/${dietLog.id}/${mealId}`
+    const { error } = await supabase.storage
+      .from('meal-photos')
+      .upload(path, file, { contentType: file.type || 'image/jpeg', upsert: true })
+
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage.from('meal-photos').getPublicUrl(path)
+      await supabase.from('meal_photos').upsert(
+        { diet_log_id: dietLog.id, meal_id: mealId, photo_url: publicUrl },
+        { onConflict: 'diet_log_id,meal_id' }
+      )
+      // cache bust para exibir a nova foto imediatamente
+      setMealPhotos(prev => ({ ...prev, [mealId]: publicUrl + '?t=' + Date.now() }))
+    }
+
+    setUploadingMeals(prev => { const s = new Set(prev); s.delete(mealId); return s })
+    // limpa o input para permitir re-seleção do mesmo arquivo
+    if (fileInputRefs.current[mealId]) fileInputRefs.current[mealId]!.value = ''
+  }
+
+  const removeMealPhoto = async (mealId: string) => {
+    if (!dietLog || !studentId) return
+    const path = `meals/${studentId}/${dietLog.id}/${mealId}`
+    await Promise.all([
+      supabase.from('meal_photos').delete().eq('diet_log_id', dietLog.id).eq('meal_id', mealId),
+      supabase.storage.from('meal-photos').remove([path]),
+    ])
+    setMealPhotos(prev => { const m = { ...prev }; delete m[mealId]; return m })
   }
 
   const handleFinalize = async () => {
@@ -127,7 +174,6 @@ export default function StudentDiet() {
   const days = diet.days?.sort((a, b) => a.sort_order - b.sort_order) || []
   const currentDay = days[currentDayIdx]
 
-  // Totais de macros dos alimentos marcados
   const checkedFoods = currentDay?.meals?.flatMap(m => m.foods.filter(f => checks[f.id])) || []
   const totals = checkedFoods.reduce((acc, f) => ({
     cal:  acc.cal  + (f.calories || 0),
@@ -181,6 +227,8 @@ export default function StudentDiet() {
           <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
             {currentDay.meals?.sort((a, b) => a.sort_order - b.sort_order).map(meal => (
               <div key={meal.id} style={{ backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:14, overflow:'hidden' }}>
+
+                {/* Cabeçalho da refeição */}
                 <div style={{ padding:'12px 16px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                   <div>
                     <p style={{ fontSize:14, fontWeight:700, color:'var(--text)', margin:0 }}>{meal.name}</p>
@@ -192,6 +240,7 @@ export default function StudentDiet() {
                   })()}
                 </div>
 
+                {/* Alimentos */}
                 <div style={{ display:'flex', flexDirection:'column' }}>
                   {meal.foods?.sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)).map(food => {
                     const checked = !!checks[food.id]
@@ -199,7 +248,6 @@ export default function StudentDiet() {
                       <button key={food.id} onClick={() => toggleCheck(food.id)}
                         disabled={finalized}
                         style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 16px', borderTop:'none', borderLeft:'none', borderRight:'none', borderBottom:'1px solid var(--border)', cursor: finalized ? 'default' : 'pointer', textAlign:'left', backgroundColor: checked ? 'rgba(232,255,0,0.04)' : 'transparent', width:'100%' }}>
-                        {/* Checkbox */}
                         <div style={{ width:20, height:20, borderRadius:5, border:`2px solid ${checked ? '#E8FF00' : 'var(--border)'}`, backgroundColor: checked ? '#E8FF00' : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, transition:'all 0.15s' }}>
                           {checked && <span style={{ fontSize:12, fontWeight:900, color:'#0A0A0A', lineHeight:1 }}>✓</span>}
                         </div>
@@ -213,6 +261,52 @@ export default function StudentDiet() {
                   })}
                 </div>
 
+                {/* ── Foto da refeição ── */}
+                {dietLog && (
+                  <div style={{ borderTop: '1px solid var(--border)' }}>
+                    {uploadingMeals.has(meal.id) ? (
+                      <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-2)', fontSize: 13 }}>
+                        <div style={{ width: 14, height: 14, border: '2px solid #E8FF00', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+                        Enviando foto...
+                      </div>
+                    ) : mealPhotos[meal.id] ? (
+                      <>
+                        <img
+                          src={mealPhotos[meal.id]}
+                          alt={`Foto: ${meal.name}`}
+                          style={{ width: '100%', maxHeight: 260, objectFit: 'cover', display: 'block' }}
+                        />
+                        <div style={{ display: 'flex', borderTop: '1px solid var(--border)' }}>
+                          <label style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', cursor: 'pointer', fontSize: 12, color: 'var(--text-2)', borderRight: '1px solid var(--border)' }}>
+                            <Camera size={13} /> Trocar foto
+                            <input
+                              ref={el => { fileInputRefs.current[meal.id] = el }}
+                              type="file" accept="image/*" capture="environment"
+                              style={{ display: 'none' }}
+                              onChange={e => { const f = e.target.files?.[0]; if (f) handleMealPhoto(meal.id, f) }}
+                            />
+                          </label>
+                          <button onClick={() => removeMealPhoto(meal.id)}
+                            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', border: 'none', cursor: 'pointer', fontSize: 12, color: '#FF4444', background: 'none' }}>
+                            <X size={13} /> Remover
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px', cursor: 'pointer' }}>
+                        <Camera size={15} color="var(--text-2)" />
+                        <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Adicionar foto da refeição</span>
+                        <input
+                          ref={el => { fileInputRefs.current[meal.id] = el }}
+                          type="file" accept="image/*" capture="environment"
+                          style={{ display: 'none' }}
+                          onChange={e => { const f = e.target.files?.[0]; if (f) handleMealPhoto(meal.id, f) }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                )}
+
                 {/* Macros da refeição */}
                 {(() => {
                   const p = meal.foods?.reduce((s, f) => s + (f.protein || 0), 0)
@@ -220,7 +314,7 @@ export default function StudentDiet() {
                   const fat = meal.foods?.reduce((s, f) => s + (f.fat || 0), 0)
                   if (!p && !c && !fat) return null
                   return (
-                    <div style={{ padding:'8px 16px 12px', display:'flex', gap:16 }}>
+                    <div style={{ padding:'8px 16px 12px', display:'flex', gap:16, borderTop: '1px solid var(--border)' }}>
                       {p ? <Macro label="Prot" value={`${p}g`} /> : null}
                       {c ? <Macro label="Carb" value={`${c}g`} /> : null}
                       {fat ? <Macro label="Gord" value={`${fat}g`} /> : null}
@@ -247,6 +341,8 @@ export default function StudentDiet() {
           )}
         </div>
       </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   )
 }
