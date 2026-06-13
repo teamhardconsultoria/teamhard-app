@@ -12,6 +12,8 @@ const DEFAULTS: Record<AllTemplateType, string> = {
   workout_assigned: 'Olá, {student_name}! 💪 Seu novo treino já está disponível no app. Acesse agora e bora treinar!',
   diet_assigned: 'Olá, {student_name}! 🥗 Sua nova dieta já está disponível no app. Qualquer dúvida, é só falar!',
   payment_pending: 'Olá, {student_name}! Você tem uma cobrança pendente. Regularize para continuar com acesso ao app. Qualquer dúvida, entre em contato!',
+  assessment_day: 'Olá, {student_name}! 📅 Hoje é o dia da sua avaliação. Não se esqueça! Qualquer dúvida, estou aqui.',
+  questionnaire_assigned: 'Olá, {student_name}! 📋 Um questionário foi enviado para você. Acesse o app para responder!',
 }
 
 const META: Record<AllTemplateType, { title: string; trigger: string; emoji: string }> = {
@@ -40,9 +42,19 @@ const META: Record<AllTemplateType, { title: string; trigger: string; emoji: str
     trigger: 'Disparada automaticamente quando você cria uma cobrança para o aluno.',
     emoji: '💳',
   },
+  assessment_day: {
+    title: 'Dia da Avaliação',
+    trigger: 'Disparada automaticamente no dia em que uma avaliação está agendada para o aluno.',
+    emoji: '📅',
+  },
+  questionnaire_assigned: {
+    title: 'Questionário Enviado',
+    trigger: 'Disparada automaticamente quando você envia um questionário para o aluno.',
+    emoji: '📋',
+  },
 }
 
-const TYPES: AllTemplateType[] = ['welcome', 'anamnese_reminder', 'workout_assigned', 'diet_assigned', 'payment_pending']
+const TYPES: AllTemplateType[] = ['welcome', 'anamnese_reminder', 'workout_assigned', 'diet_assigned', 'payment_pending', 'assessment_day', 'questionnaire_assigned']
 
 interface TplState { content: string; active: boolean; saving: boolean; saved: boolean }
 
@@ -61,6 +73,8 @@ export default function AutoMessages() {
     workout_assigned: { ...defaultState(), content: DEFAULTS.workout_assigned },
     diet_assigned: { ...defaultState(), content: DEFAULTS.diet_assigned },
     payment_pending: { ...defaultState(), content: DEFAULTS.payment_pending },
+    assessment_day: { ...defaultState(), content: DEFAULTS.assessment_day },
+    questionnaire_assigned: { ...defaultState(), content: DEFAULTS.questionnaire_assigned },
   })
 
   useEffect(() => { init() }, [])

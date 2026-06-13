@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Plus, X, Trash2, Send, FileText, ChevronDown, ChevronUp, Check, ClipboardList, AlertCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
+import { sendAutoMessage } from '../../lib/autoMessage'
 
 type QuestionType = 'text' | 'number' | 'scale' | 'single' | 'multiple' | 'date'
 interface Question { id: string; type: QuestionType; text: string; required: boolean; options?: string[] }
@@ -326,7 +327,7 @@ export default function Questionnaires() {
         <CreateModal coachId={coachId} onClose={() => setShowCreate(false)} onSaved={async () => { setShowCreate(false); if (coachId) await loadQuestionnaires(coachId) }} />
       )}
       {showSend && selected && (
-        <SendModal questionnaire={selected} students={students} defaultStudentId={sendToStudentId} onClose={() => { setShowSend(false); setSendToStudentId(null) }}
+        <SendModal questionnaire={selected} students={students} defaultStudentId={sendToStudentId} coachUserId={user!.id} coachId={coachId!} onClose={() => { setShowSend(false); setSendToStudentId(null) }}
           onSent={async () => { setShowSend(false); setSendToStudentId(null); if (coachId) await loadQuestionnaires(coachId); if (selected) await selectQuestionnaire(selected) }} />
       )}
     </div>
@@ -555,7 +556,7 @@ function CreateModal({ coachId, onClose, onSaved }: { coachId:string; onClose:()
   )
 }
 
-function SendModal({ questionnaire, students, defaultStudentId, onClose, onSent }: { questionnaire:Questionnaire; students:Student[]; defaultStudentId?:string|null; onClose:()=>void; onSent:()=>void }) {
+function SendModal({ questionnaire, students, defaultStudentId, coachUserId, coachId, onClose, onSent }: { questionnaire:Questionnaire; students:Student[]; defaultStudentId?:string|null; coachUserId:string; coachId:string; onClose:()=>void; onSent:()=>void }) {
   const [studentId, setStudentId] = useState(defaultStudentId || '')
   const [dueDate, setDueDate] = useState('')
   const [saving, setSaving] = useState(false)
@@ -566,6 +567,8 @@ function SendModal({ questionnaire, students, defaultStudentId, onClose, onSent 
     setSaving(true); setError('')
     const { error: err } = await supabase.from('questionnaire_assignments').upsert({ questionnaire_id: questionnaire.id, student_id: studentId, due_date: dueDate || null }, { onConflict: 'questionnaire_id,student_id' })
     if (err) { setError('Aluno já recebeu este questionário ou erro ao enviar.'); setSaving(false); return }
+    const studentName = students.find(s => s.id === studentId)?.name ?? ''
+    sendAutoMessage({ coachUserId, coachId, studentId, type: 'questionnaire_assigned', studentName })
     onSent()
   }
 

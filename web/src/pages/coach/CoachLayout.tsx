@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Users, MessageSquare, CreditCard,
-  ClipboardList, LogOut, Settings, Star, FileText, Sun, Moon, Bell, Zap, UserCircle, Menu, Target,
+  ClipboardList, LogOut, Settings, Star, FileText, Sun, Moon, Bell, Zap, UserCircle, Menu, Target, Activity,
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 
@@ -150,6 +150,7 @@ export default function CoachLayout() {
 
   const navItems = [
     { to: '/coach/dashboard',      icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/coach/semaphore',      icon: Activity,        label: 'Semáforo' },
     { to: '/coach/students',       icon: Users,           label: 'Alunos' },
     { to: '/coach/leads',          icon: Target,          label: 'CRM / Leads' },
     { to: '/coach/feedbacks',      icon: Star,            label: 'Feedbacks',     badge: newFeedbacks },
@@ -170,6 +171,7 @@ export default function CoachLayout() {
       { to: '/coach/assessments', icon: ClipboardList,   label: 'Avaliações',badge: newAssessments },
     ]
     const moreItems = [
+      { to: '/coach/semaphore',      icon: Activity,   label: 'Semáforo',         badge: 0 },
       { to: '/coach/leads',          icon: Target,     label: 'CRM / Leads',      badge: 0 },
       { to: '/coach/feedbacks',      icon: Star,       label: 'Feedbacks',        badge: newFeedbacks },
       { to: '/coach/questionnaires', icon: FileText,   label: 'Questionários',    badge: newQuestionnaires },

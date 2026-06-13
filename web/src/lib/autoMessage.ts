@@ -1,11 +1,13 @@
 import { supabase } from './supabase'
 
-export type AutoMessageType = 'workout_assigned' | 'diet_assigned' | 'payment_pending'
+export type AutoMessageType = 'workout_assigned' | 'diet_assigned' | 'payment_pending' | 'questionnaire_assigned' | 'assessment_day'
 
 const DEFAULTS: Record<AutoMessageType, string> = {
   workout_assigned: 'Olá, {student_name}! 💪 Seu novo treino já está disponível no app. Acesse agora e bora treinar!',
   diet_assigned: 'Olá, {student_name}! 🥗 Sua nova dieta já está disponível no app. Qualquer dúvida, é só falar!',
   payment_pending: 'Olá, {student_name}! Você tem uma cobrança pendente. Regularize para continuar com acesso ao app. Qualquer dúvida, entre em contato!',
+  questionnaire_assigned: 'Olá, {student_name}! 📋 Um questionário foi enviado para você. Acesse o app para responder!',
+  assessment_day: 'Olá, {student_name}! 📅 Hoje é o dia da sua avaliação. Não se esqueça! Qualquer dúvida, estou aqui.',
 }
 
 export async function sendAutoMessage({

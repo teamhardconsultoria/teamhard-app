@@ -19,6 +19,7 @@ import Chat from './pages/coach/Chat'
 import Payments from './pages/coach/Payments'
 import AutoMessages from './pages/coach/AutoMessages'
 import CoachProfile from './pages/coach/CoachProfile'
+import Semaphore from './pages/coach/Semaphore'
 import Leads from './pages/coach/Leads'
 import AdminLayout from './pages/admin/AdminLayout'
 import AdminDashboard from './pages/admin/AdminDashboard'
@@ -87,6 +88,7 @@ export default function App() {
         <Route path="payments" element={<Payments />} />
         <Route path="leads" element={<Leads />} />
         <Route path="auto-messages" element={<AutoMessages />} />
+        <Route path="semaphore" element={<Semaphore />} />
         <Route path="profile" element={<CoachProfile />} />
       </Route>
 
