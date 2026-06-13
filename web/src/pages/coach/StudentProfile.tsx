@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Dumbbell, Salad, ClipboardList, MessageSquare, User, Scale, Activity, List, TrendingUp, History, KeyRound, Copy, Check, CalendarClock, X, ShieldOff, ShieldCheck, Pencil } from 'lucide-react'
+import { ArrowLeft, Dumbbell, Salad, ClipboardList, MessageSquare, User, Scale, Activity, List, TrendingUp, History, KeyRound, Copy, Check, CalendarClock, X, ShieldOff, ShieldCheck, Pencil, EyeOff } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -12,6 +12,7 @@ interface StudentDetail {
   payment_status: string
   plan_end: string
   access_blocked: boolean
+  diet_enabled: boolean
   assessment_scheduled_date?: string | null
   user: { name: string; email: string; phone?: string; avatar_url?: string | null }
   anamnese?: {
@@ -60,6 +61,7 @@ export default function StudentProfile() {
   const [scheduleDate, setScheduleDate] = useState('')
   const [savingSchedule, setSavingSchedule] = useState(false)
   const [blocking, setBlocking] = useState(false)
+  const [togglingDiet, setTogglingDiet] = useState(false)
 
   // Edit modal (super_admin only)
   const [showEdit, setShowEdit] = useState(false)
@@ -157,9 +159,18 @@ export default function StudentProfile() {
     fetchStudent()
   }
 
+  const handleToggleDiet = async () => {
+    if (!student) return
+    const newVal = !student.diet_enabled
+    setTogglingDiet(true)
+    await supabase.from('students').update({ diet_enabled: newVal }).eq('id', id)
+    setStudent(prev => prev ? { ...prev, diet_enabled: newVal } : prev)
+    setTogglingDiet(false)
+  }
+
   const fetchStudent = async () => {
     const { data } = await supabase.from('students').select(`
-      id, user_id, plan_type, payment_status, plan_end, access_blocked, assessment_scheduled_date,
+      id, user_id, plan_type, payment_status, plan_end, access_blocked, diet_enabled, assessment_scheduled_date,
       user:users(name, email, phone, avatar_url)
     `).eq('id', id).single()
 
@@ -172,6 +183,7 @@ export default function StudentProfile() {
       setStudent({
         ...data,
         access_blocked: (data as any).access_blocked ?? false,
+        diet_enabled: (data as any).diet_enabled ?? true,
         user: data.user as any,
         anamnese: anamneseRes.data || undefined,
         lastSession: sessionRes.data || undefined,
@@ -333,6 +345,22 @@ export default function StudentProfile() {
                 : <><ShieldOff size={14} /> {blocking ? 'Bloqueando…' : 'Bloquear acesso'}</>
               }
             </BlockBtn>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, paddingTop: 12, borderTop: '1px solid var(--border)', marginTop: 0 }}>
+            <div>
+              <p style={{ fontSize: 14, color: student.diet_enabled ? 'var(--text)' : 'var(--text-2)', margin: 0 }}>
+                {student.diet_enabled ? 'Área de dieta ativada' : 'Área de dieta desativada'}
+              </p>
+              <p style={{ fontSize: 12, color: 'var(--text-2)', margin: '3px 0 0 0' }}>
+                {student.diet_enabled ? 'O aluno visualiza a aba Dieta no app.' : 'A aba Dieta está oculta para este aluno.'}
+              </p>
+            </div>
+            <DietToggleBtn onClick={handleToggleDiet} disabled={togglingDiet} enabled={student.diet_enabled}>
+              {student.diet_enabled
+                ? <><EyeOff size={14} /> {togglingDiet ? 'Salvando…' : 'Desativar dieta'}</>
+                : <><Salad size={14} /> {togglingDiet ? 'Salvando…' : 'Ativar dieta'}</>}
+            </DietToggleBtn>
           </div>
 
           {newPassword && (
@@ -521,6 +549,22 @@ function BlockBtn({ children, onClick, disabled, blocked }: { children: React.Re
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', backgroundColor: hovered && !disabled ? bgHover : bgIdle, color, border: `1px solid ${border}`, borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1, flexShrink: 0, transition: 'background-color 0.15s' }}>
+      {children}
+    </button>
+  )
+}
+
+function DietToggleBtn({ children, onClick, disabled, enabled }: { children: React.ReactNode; onClick: () => void; disabled: boolean; enabled: boolean }) {
+  const [hovered, setHovered] = useState(false)
+  const bgIdle = enabled ? 'rgba(255,152,0,0.1)' : 'rgba(232,255,0,0.08)'
+  const bgHover = enabled ? 'rgba(255,152,0,0.2)' : 'rgba(232,255,0,0.16)'
+  const border = enabled ? 'rgba(255,152,0,0.4)' : 'rgba(232,255,0,0.3)'
+  const color = enabled ? '#FF9800' : '#E8FF00'
+  return (
+    <button onClick={onClick} disabled={disabled}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', backgroundColor: hovered && !disabled ? bgHover : bgIdle, color, border: `1px solid ${border}`, borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1, flexShrink: 0, transition: 'background-color 0.15s', whiteSpace: 'nowrap' }}>
       {children}
     </button>
   )

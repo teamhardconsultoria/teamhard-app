@@ -14,8 +14,15 @@ export default function StudentLayout() {
   const [isDark, setIsDark] = useState(getTheme() === 'dark')
   const [unread, setUnread] = useState(0)
   const [showMenu, setShowMenu] = useState(false)
+  const [dietEnabled, setDietEnabled] = useState(true)
 
   const handleToggle = () => { const t = toggleTheme(); setIsDark(t === 'dark') }
+
+  useEffect(() => {
+    if (!user) return
+    supabase.from('students').select('diet_enabled').eq('user_id', user.id).single()
+      .then(({ data }) => { if (data) setDietEnabled(data.diet_enabled ?? true) })
+  }, [user])
 
   useEffect(() => {
     if (!user) return
@@ -43,7 +50,7 @@ export default function StudentLayout() {
   const navItems = [
     { to: '/student/home',        icon: LayoutDashboard, label: 'Início'      },
     { to: '/student/workout',     icon: Dumbbell,        label: 'Treino'      },
-    { to: '/student/diet',        icon: Salad,           label: 'Dieta'       },
+    ...(dietEnabled ? [{ to: '/student/diet', icon: Salad, label: 'Dieta' } as const] : []),
     { to: '/student/chat',        icon: MessageSquare,   label: 'Chat',    badge: unread },
     { to: '/student/assessments',    icon: Scale,          label: 'Avaliação'     },
     { to: '/student/questionnaires', icon: ClipboardList,  label: 'Questionários' },

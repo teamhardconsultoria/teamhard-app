@@ -29,8 +29,9 @@ export default function StudentDiet() {
   useEffect(() => { load() }, [])
 
   const load = async () => {
-    const { data: student } = await supabase.from('students').select('id').eq('user_id', user!.id).single()
+    const { data: student } = await supabase.from('students').select('id, diet_enabled').eq('user_id', user!.id).single()
     if (!student) { setLoading(false); return }
+    if (!(student as any).diet_enabled) { setLoading(false); return }
     setStudentId(student.id)
 
     const { data } = await supabase.from('diets').select(`
