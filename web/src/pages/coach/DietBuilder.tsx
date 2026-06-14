@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Plus, Trash2, ChevronDown, X, Search } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, X, Search, GripVertical } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import { sendPushToStudent } from '../../lib/push'
@@ -39,6 +39,21 @@ export default function DietBuilder() {
   const [days, setDays] = useState<DietDay[]>([emptyDay()])
   const [originalDayIds, setOriginalDayIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  const [draggingMeal, setDraggingMeal] = useState<{ di: number; mi: number } | null>(null)
+  const [dragOverMeal, setDragOverMeal] = useState<{ di: number; mi: number } | null>(null)
+  const dragMealSrc = useRef<{ di: number; mi: number } | null>(null)
+  const dragMealAllowed = useRef(false)
+
+  const moveMeal = (di: number, from: number, to: number) => {
+    if (from === to) return
+    setDays(prev => prev.map((d, i) => {
+      if (i !== di) return d
+      const meals = [...d.meals]
+      const [moved] = meals.splice(from, 1)
+      meals.splice(to, 0, moved)
+      return { ...d, meals }
+    }))
+  }
 
   useEffect(() => { fetchStudent(); if (isEditing) fetchDiet() }, [studentId])
 
@@ -213,9 +228,37 @@ export default function DietBuilder() {
                     {/* Refeições */}
                     {day.meals.map((meal, mi) => {
                       const mealTotals = calcMealTotals(meal.foods)
+                      const isDraggingThis = draggingMeal?.di === di && draggingMeal?.mi === mi
+                      const isDragOver = dragOverMeal?.di === di && dragOverMeal?.mi === mi
                       return (
-                        <div key={mi} style={{ backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+                        <div key={mi}
+                          draggable
+                          onDragStart={e => {
+                            if (!dragMealAllowed.current) { e.preventDefault(); return }
+                            dragMealAllowed.current = false
+                            dragMealSrc.current = { di, mi }
+                            setDraggingMeal({ di, mi })
+                          }}
+                          onDragEnd={() => { setDraggingMeal(null); setDragOverMeal(null); dragMealSrc.current = null }}
+                          onDragOver={e => { e.preventDefault(); e.stopPropagation(); if (dragMealSrc.current?.di === di && dragMealSrc.current?.mi !== mi) setDragOverMeal({ di, mi }) }}
+                          onDragLeave={() => { if (dragOverMeal?.di === di && dragOverMeal?.mi === mi) setDragOverMeal(null) }}
+                          onDrop={e => {
+                            e.preventDefault()
+                            if (dragMealSrc.current && dragMealSrc.current.di === di && dragMealSrc.current.mi !== mi) {
+                              moveMeal(di, dragMealSrc.current.mi, mi)
+                            }
+                            setDraggingMeal(null); setDragOverMeal(null); dragMealSrc.current = null
+                          }}
+                          style={{ backgroundColor: 'var(--bg)', border: isDragOver ? '1px solid #E8FF00' : '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', opacity: isDraggingThis ? 0.45 : 1, transition: 'opacity 0.15s, border-color 0.15s' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+                            {day.meals.length > 1 && (
+                              <span
+                                onMouseDown={() => { dragMealAllowed.current = true }}
+                                onMouseUp={() => { dragMealAllowed.current = false }}
+                                style={{ color: '#888', cursor: 'grab', flexShrink: 0, display: 'flex', alignItems: 'center', touchAction: 'none' }}>
+                                <GripVertical size={14} />
+                              </span>
+                            )}
                             <input type="text" value={meal.name} placeholder="Nome da refeição (ex: Café da Manhã)"
                               onChange={e => updateMeal(di, mi, 'name', e.target.value)}
                               style={{ flex: 1, background: 'transparent', color: 'var(--text)', fontSize: 13, fontWeight: 600, border: 'none', outline: 'none' }} />
