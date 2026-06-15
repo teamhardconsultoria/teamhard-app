@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Users, MessageSquare, CreditCard,
-  ClipboardList, LogOut, Settings, Star, FileText, Sun, Moon, Bell, Zap, UserCircle, Menu, Target, Activity,
+  ClipboardList, LogOut, Settings, Star, FileText, Sun, Moon, Bell, Zap, UserCircle, Menu, Target, Activity, Utensils,
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 
@@ -23,6 +23,7 @@ export default function CoachLayout() {
   const [newFeedbacks, setNewFeedbacks] = useState(0)
   const [newQuestionnaires, setNewQuestionnaires] = useState(0)
   const [showBell, setShowBell] = useState(false)
+  const [hasFoods, setHasFoods] = useState(false)
   const bellRef = useRef<HTMLDivElement>(null)
   const coachIdRef = useRef<string | null>(null)
   const handleToggle = () => { const t = toggleTheme(); setIsDark(t === 'dark') }
@@ -106,6 +107,13 @@ export default function CoachLayout() {
     return () => { subs.forEach(s => s?.unsubscribe()) }
   }, [])
 
+  // Verifica se a biblioteca de alimentos tem entradas para exibir o link no menu
+  useEffect(() => {
+    supabase.from('food_library').select('id', { count: 'exact', head: true }).eq('active', true).then(({ count }) => {
+      setHasFoods((count ?? 0) > 0)
+    })
+  }, [])
+
   // Re-conta avaliações quando coach visualiza um aluno (evento disparado por Assessments.tsx)
   useEffect(() => {
     const handler = async () => {
@@ -159,6 +167,7 @@ export default function CoachLayout() {
     { to: '/coach/chat',           icon: MessageSquare,   label: 'Chat',          badge: newMessages },
     { to: '/coach/payments',       icon: CreditCard,      label: 'Pagamentos' },
     { to: '/coach/auto-messages',  icon: Zap,             label: 'Msgs Automáticas' },
+    ...(hasFoods && user?.role === 'super_admin' ? [{ to: '/admin/foods', icon: Utensils, label: 'Alimentos' }] : []),
     { to: '/coach/profile',        icon: UserCircle,      label: 'Meu Perfil' },
   ]
 
@@ -177,6 +186,7 @@ export default function CoachLayout() {
       { to: '/coach/questionnaires', icon: FileText,   label: 'Questionários',    badge: newQuestionnaires },
       { to: '/coach/payments',       icon: CreditCard, label: 'Pagamentos',       badge: 0 },
       { to: '/coach/auto-messages',  icon: Zap,        label: 'Msgs Automáticas', badge: 0 },
+      ...(hasFoods && user?.role === 'super_admin' ? [{ to: '/admin/foods', icon: Utensils, label: 'Alimentos', badge: 0 }] : []),
       { to: '/coach/profile',        icon: UserCircle, label: 'Meu Perfil',       badge: 0 },
     ]
     const moreBadge = newFeedbacks + newQuestionnaires
