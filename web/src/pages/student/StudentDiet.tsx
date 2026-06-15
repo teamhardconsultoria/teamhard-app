@@ -312,9 +312,9 @@ export default function StudentDiet() {
               <span style={{ fontSize:12, color:'var(--text-2)', marginLeft:4 }}>kcal consumidas</span>
             </div>
             <div style={{ display:'flex', gap:14, flexWrap:'wrap' }}>
-              <MacroChip label="Prot" value={Math.round(totals.prot)} color="#4FC3F7" />
-              <MacroChip label="Carb" value={Math.round(totals.carb)} color="#FFB74D" />
-              <MacroChip label="Gord" value={Math.round(totals.fat)}  color="#F06292" />
+              <MacroChip label="Prot" value={Math.round(totals.prot * 10) / 10} color="#4FC3F7" />
+              <MacroChip label="Carb" value={Math.round(totals.carb * 10) / 10} color="#FFB74D" />
+              <MacroChip label="Gord" value={Math.round(totals.fat  * 10) / 10} color="#F06292" />
             </div>
           </div>
         )}
@@ -353,7 +353,7 @@ export default function StudentDiet() {
                           </div>
                           <div style={{ flex:1, minWidth:0 }}>
                             <p style={{ fontSize:13, color: checked ? 'var(--text-2)' : 'var(--text)', margin:0, textDecoration: checked ? 'line-through' : 'none' }}>{food.name}</p>
-                            <p style={{ fontSize:11, color:'var(--text-2)', margin:'2px 0 0' }}>{food.quantity} {food.unit}{food.protein ? ` · P:${food.protein}g C:${food.carbs}g G:${food.fat}g` : ''}</p>
+                            <p style={{ fontSize:11, color:'var(--text-2)', margin:'2px 0 0' }}>{food.quantity} {food.unit}{food.protein ? ` · P:${Math.round((food.protein||0)*10)/10}g C:${Math.round((food.carbs||0)*10)/10}g G:${Math.round((food.fat||0)*10)/10}g` : ''}</p>
                           </div>
                         </div>
 
@@ -428,9 +428,9 @@ export default function StudentDiet() {
                   if (!p && !c && !fat) return null
                   return (
                     <div style={{ padding:'8px 16px 12px', display:'flex', gap:16, borderTop: '1px solid var(--border)' }}>
-                      {p ? <Macro label="Prot" value={`${p}g`} /> : null}
-                      {c ? <Macro label="Carb" value={`${c}g`} /> : null}
-                      {fat ? <Macro label="Gord" value={`${fat}g`} /> : null}
+                      {p ? <Macro label="Prot" value={`${Math.round(p * 10) / 10}g`} /> : null}
+                      {c ? <Macro label="Carb" value={`${Math.round(c * 10) / 10}g`} /> : null}
+                      {fat ? <Macro label="Gord" value={`${Math.round(fat * 10) / 10}g`} /> : null}
                     </div>
                   )
                 })()}
