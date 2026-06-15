@@ -14,6 +14,24 @@ interface FoodLibItem { id: string; name: string; category: string; calories_per
 const spin: React.CSSProperties = { width:28, height:28, border:'2px solid #E8FF00', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }
 const today = new Date().toISOString().split('T')[0]
 
+// Categorias da biblioteca que pertencem a cada grupo nutricional
+const CATEGORY_GROUPS: Record<string, string[]> = {
+  'proteína':    ['proteína', 'laticínio'],
+  'carboidrato': ['carboidrato', 'fruta', 'legume/verdura'],
+  'gordura':     ['gordura'],
+}
+
+// Infere grupo nutricional pelos macros (g por porção)
+function inferGroup(protein: number, carbs: number, fat: number): keyof typeof CATEGORY_GROUPS {
+  const p = protein || 0
+  const c = carbs || 0
+  const f = fat || 0
+  const total = p + c + f
+  if (f >= 25 || (total > 0 && f / total >= 0.50)) return 'gordura'
+  if (p >= 12 && p > c && p > f) return 'proteína'
+  return 'carboidrato'
+}
+
 export default function StudentDiet() {
   const { user } = useAuthStore()
   const isMobile = useIsMobile()
@@ -166,17 +184,27 @@ export default function StudentDiet() {
     setSaving(false)
   }
 
-  // Todos os alimentos da dieta (exceto o selecionado) para usar como substitutos
+  // Todos os alimentos da dieta para usar como substitutos
   const allDietFoods = useMemo(() => {
     if (!diet) return []
     return diet.days.flatMap(d => d.meals.flatMap(m => m.foods))
   }, [diet])
 
+  // Grupo nutricional do alimento selecionado (proteína | carboidrato | gordura)
+  const subGroup = useMemo(() => {
+    if (!subFood || !subFood.calories) return null
+    return inferGroup(subFood.protein || 0, subFood.carbs || 0, subFood.fat || 0)
+  }, [subFood])
+
+  // Categorias da biblioteca permitidas para o grupo
+  const allowedLibCategories = useMemo(() => subGroup ? CATEGORY_GROUPS[subGroup] : [], [subGroup])
+
   const dietSubstitutes = useMemo(() => {
-    if (!subFood || !subFood.calories || subFood.calories <= 0) return []
+    if (!subFood || !subFood.calories || subFood.calories <= 0 || !subGroup) return []
     const q = subSearch.toLowerCase()
     return allDietFoods
       .filter(f => f.id !== subFood.id && f.calories && f.calories > 0)
+      .filter(f => inferGroup(f.protein || 0, f.carbs || 0, f.fat || 0) === subGroup)
       .filter(f => !q || f.name.toLowerCase().includes(q))
       .map(f => {
         const qty = parseFloat(String(f.quantity))
@@ -197,12 +225,13 @@ export default function StudentDiet() {
       })
       .filter(Boolean)
       .sort((a, b) => a!.name.localeCompare(b!.name)) as { id: string; name: string; new_qty: number; unit: string; protein: number; carbs: number; fat: number }[]
-  }, [subFood, allDietFoods, subSearch])
+  }, [subFood, subGroup, allDietFoods, subSearch])
 
   const libSubstitutes = useMemo(() => {
-    if (!subFood || !subFood.calories || subFood.calories <= 0) return []
+    if (!subFood || !subFood.calories || subFood.calories <= 0 || !allowedLibCategories.length) return []
     const q = subSearch.toLowerCase()
     return libFoods
+      .filter(f => allowedLibCategories.includes(f.category))
       .filter(f => !q || f.name.toLowerCase().includes(q))
       .filter(f => f.calories_per_100g > 0)
       .map(f => {
@@ -221,7 +250,7 @@ export default function StudentDiet() {
       })
       .filter(Boolean)
       .sort((a, b) => a!.name.localeCompare(b!.name)) as { id: string; name: string; new_qty: number; unit: string; protein: number; carbs: number; fat: number }[]
-  }, [subFood, libFoods, subSearch])
+  }, [subFood, allowedLibCategories, libFoods, subSearch])
 
   const pad = isMobile ? '20px 16px 48px' : '40px 32px 48px'
 
@@ -441,9 +470,16 @@ export default function StudentDiet() {
               <div>
                 <p style={{ fontSize:11, color:'var(--text-2)', margin:'0 0 2px', textTransform:'uppercase', letterSpacing:1 }}>Substituir</p>
                 <p style={{ fontSize:16, fontWeight:900, color:'var(--text)', margin:0 }}>{subFood.name}</p>
-                <p style={{ fontSize:12, color:'var(--text-2)', margin:'2px 0 0' }}>
-                  {subFood.quantity} {subFood.unit} · <span style={{ color:'#E8FF00', fontWeight:700 }}>{subFood.calories} kcal</span>
-                </p>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:2 }}>
+                  <p style={{ fontSize:12, color:'var(--text-2)', margin:0 }}>
+                    {subFood.quantity} {subFood.unit} · <span style={{ color:'#E8FF00', fontWeight:700 }}>{subFood.calories} kcal</span>
+                  </p>
+                  {subGroup && (
+                    <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:20, backgroundColor:'rgba(232,255,0,0.12)', color:'#E8FF00', textTransform:'uppercase', letterSpacing:0.5 }}>
+                      {subGroup}
+                    </span>
+                  )}
+                </div>
               </div>
               <button onClick={() => { setSubFood(null); setSubSearch('') }}
                 style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-2)', padding:8, display:'flex', alignItems:'center' }}>
