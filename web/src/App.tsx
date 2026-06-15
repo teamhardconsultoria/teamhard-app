@@ -30,6 +30,7 @@ import Coaches from './pages/admin/Coaches'
 import SupportChat from './pages/admin/SupportChat'
 import ActivityLogs from './pages/admin/ActivityLogs'
 import Settings from './pages/admin/Settings'
+import FoodLibrary from './pages/admin/FoodLibrary'
 import StudentLayout from './pages/student/StudentLayout'
 import StudentHome from './pages/student/StudentHome'
 import StudentWorkout from './pages/student/StudentWorkout'
@@ -104,6 +105,7 @@ export default function App() {
         <Route path="exercises" element={<ExerciseLibrary />} />
         <Route path="templates" element={<WorkoutTemplates />} />
         <Route path="templates/:templateId/build" element={<TemplateBuilder />} />
+        <Route path="foods" element={<FoodLibrary />} />
         <Route path="support" element={<SupportChat />} />
         <Route path="activity" element={<ActivityLogs />} />
         <Route path="settings" element={<Settings />} />

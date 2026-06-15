@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from 'react'
-import { ChevronLeft, ChevronRight as ChevronRightIcon, Salad, CheckCircle2, Camera, X } from 'lucide-react'
+import { useEffect, useState, useRef, useMemo } from 'react'
+import { ChevronLeft, ChevronRight as ChevronRightIcon, Salad, CheckCircle2, Camera, X, ArrowLeftRight, Search } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -9,6 +9,7 @@ interface Meal { id: string; name: string; time?: string; sort_order: number; fo
 interface DietDay { id: string; name: string; sort_order: number; meals: Meal[] }
 interface Diet { id: string; name: string; valid_from: string; valid_to: string; days: DietDay[] }
 interface DietLog { id: string; finalized_at: string | null }
+interface FoodLibItem { id: string; name: string; category: string; calories_per_100g: number; protein_per_100g: number; carbs_per_100g: number; fat_per_100g: number }
 
 const spin: React.CSSProperties = { width:28, height:28, border:'2px solid #E8FF00', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }
 const today = new Date().toISOString().split('T')[0]
@@ -31,24 +32,36 @@ export default function StudentDiet() {
   const [uploadingMeals, setUploadingMeals] = useState<Set<string>>(new Set())
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
+  // Substituições
+  const [libFoods, setLibFoods] = useState<FoodLibItem[]>([])
+  const [subFood, setSubFood] = useState<Food | null>(null)
+  const [subSearch, setSubSearch] = useState('')
+
   useEffect(() => { load() }, [])
 
   const load = async () => {
-    const { data: student } = await supabase.from('students').select('id, diet_enabled').eq('user_id', user!.id).single()
+    const [{ data: student }] = await Promise.all([
+      supabase.from('students').select('id, diet_enabled').eq('user_id', user!.id).single(),
+    ])
     if (!student) { setLoading(false); return }
     if (!(student as any).diet_enabled) { setLoading(false); return }
     setStudentId(student.id)
 
-    const { data } = await supabase.from('diets').select(`
-      id, name, valid_from, valid_to,
-      days:diet_days(
-        id, name:label, sort_order,
-        meals:meals(
-          id, name, time:suggested_time, sort_order,
-          foods:meal_foods(id, name, quantity, unit, calories, protein, carbs, fat, sort_order)
+    const [{ data }, { data: lib }] = await Promise.all([
+      supabase.from('diets').select(`
+        id, name, valid_from, valid_to,
+        days:diet_days(
+          id, name:label, sort_order,
+          meals:meals(
+            id, name, time:suggested_time, sort_order,
+            foods:meal_foods(id, name, quantity, unit, calories, protein, carbs, fat, sort_order)
+          )
         )
-      )
-    `).eq('student_id', student.id).eq('active', true).order('valid_from', { ascending: false }).limit(1).maybeSingle()
+      `).eq('student_id', student.id).eq('active', true).order('valid_from', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('food_library').select('id, name, category, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g').order('name'),
+    ])
+
+    setLibFoods(lib || [])
 
     if (data) {
       setDiet(data as any)
@@ -128,12 +141,10 @@ export default function StudentDiet() {
         { diet_log_id: dietLog.id, meal_id: mealId, photo_url: publicUrl },
         { onConflict: 'diet_log_id,meal_id' }
       )
-      // cache bust para exibir a nova foto imediatamente
       setMealPhotos(prev => ({ ...prev, [mealId]: publicUrl + '?t=' + Date.now() }))
     }
 
     setUploadingMeals(prev => { const s = new Set(prev); s.delete(mealId); return s })
-    // limpa o input para permitir re-seleção do mesmo arquivo
     if (fileInputRefs.current[mealId]) fileInputRefs.current[mealId]!.value = ''
   }
 
@@ -154,6 +165,63 @@ export default function StudentDiet() {
     setFinalized(true)
     setSaving(false)
   }
+
+  // Todos os alimentos da dieta (exceto o selecionado) para usar como substitutos
+  const allDietFoods = useMemo(() => {
+    if (!diet) return []
+    return diet.days.flatMap(d => d.meals.flatMap(m => m.foods))
+  }, [diet])
+
+  const dietSubstitutes = useMemo(() => {
+    if (!subFood || !subFood.calories || subFood.calories <= 0) return []
+    const q = subSearch.toLowerCase()
+    return allDietFoods
+      .filter(f => f.id !== subFood.id && f.calories && f.calories > 0)
+      .filter(f => !q || f.name.toLowerCase().includes(q))
+      .map(f => {
+        const qty = parseFloat(String(f.quantity))
+        if (!qty) return null
+        const density = f.calories! / qty
+        const new_qty = subFood.calories! / density
+        if (new_qty <= 0 || new_qty > 5000) return null
+        const ratio = new_qty / qty
+        return {
+          id: f.id,
+          name: f.name,
+          new_qty,
+          unit: f.unit,
+          protein: (f.protein || 0) * ratio,
+          carbs: (f.carbs || 0) * ratio,
+          fat: (f.fat || 0) * ratio,
+        }
+      })
+      .filter(Boolean)
+      .sort((a, b) => a!.name.localeCompare(b!.name)) as { id: string; name: string; new_qty: number; unit: string; protein: number; carbs: number; fat: number }[]
+  }, [subFood, allDietFoods, subSearch])
+
+  const libSubstitutes = useMemo(() => {
+    if (!subFood || !subFood.calories || subFood.calories <= 0) return []
+    const q = subSearch.toLowerCase()
+    return libFoods
+      .filter(f => !q || f.name.toLowerCase().includes(q))
+      .filter(f => f.calories_per_100g > 0)
+      .map(f => {
+        const new_qty = (subFood.calories! / f.calories_per_100g) * 100
+        if (new_qty <= 0 || new_qty > 5000) return null
+        const ratio = new_qty / 100
+        return {
+          id: f.id,
+          name: f.name,
+          new_qty,
+          unit: 'g',
+          protein: f.protein_per_100g * ratio,
+          carbs: f.carbs_per_100g * ratio,
+          fat: f.fat_per_100g * ratio,
+        }
+      })
+      .filter(Boolean)
+      .sort((a, b) => a!.name.localeCompare(b!.name)) as { id: string; name: string; new_qty: number; unit: string; protein: number; carbs: number; fat: number }[]
+  }, [subFood, libFoods, subSearch])
 
   const pad = isMobile ? '20px 16px 48px' : '40px 32px 48px'
 
@@ -245,18 +313,34 @@ export default function StudentDiet() {
                   {meal.foods?.sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0)).map(food => {
                     const checked = !!checks[food.id]
                     return (
-                      <button key={food.id} onClick={() => toggleCheck(food.id)}
-                        disabled={finalized}
-                        style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 16px', borderTop:'none', borderLeft:'none', borderRight:'none', borderBottom:'1px solid var(--border)', cursor: finalized ? 'default' : 'pointer', textAlign:'left', backgroundColor: checked ? 'rgba(232,255,0,0.04)' : 'transparent', width:'100%' }}>
-                        <div style={{ width:20, height:20, borderRadius:5, border:`2px solid ${checked ? '#E8FF00' : 'var(--border)'}`, backgroundColor: checked ? '#E8FF00' : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, transition:'all 0.15s' }}>
-                          {checked && <span style={{ fontSize:12, fontWeight:900, color:'#0A0A0A', lineHeight:1 }}>✓</span>}
+                      <div key={food.id}
+                        style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 16px', borderBottom:'1px solid var(--border)', backgroundColor: checked ? 'rgba(232,255,0,0.04)' : 'transparent', width:'100%' }}>
+
+                        {/* Área clicável (checkbox toggle) */}
+                        <div onClick={() => toggleCheck(food.id)}
+                          style={{ display:'flex', alignItems:'center', gap:12, flex:1, minWidth:0, cursor: finalized ? 'default' : 'pointer' }}>
+                          <div style={{ width:20, height:20, borderRadius:5, border:`2px solid ${checked ? '#E8FF00' : 'var(--border)'}`, backgroundColor: checked ? '#E8FF00' : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, transition:'all 0.15s' }}>
+                            {checked && <span style={{ fontSize:12, fontWeight:900, color:'#0A0A0A', lineHeight:1 }}>✓</span>}
+                          </div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <p style={{ fontSize:13, color: checked ? 'var(--text-2)' : 'var(--text)', margin:0, textDecoration: checked ? 'line-through' : 'none' }}>{food.name}</p>
+                            <p style={{ fontSize:11, color:'var(--text-2)', margin:'2px 0 0' }}>{food.quantity} {food.unit}{food.protein ? ` · P:${food.protein}g C:${food.carbs}g G:${food.fat}g` : ''}</p>
+                          </div>
                         </div>
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <p style={{ fontSize:13, color: checked ? 'var(--text-2)' : 'var(--text)', margin:0, textDecoration: checked ? 'line-through' : 'none' }}>{food.name}</p>
-                          <p style={{ fontSize:11, color:'var(--text-2)', margin:'2px 0 0' }}>{food.quantity} {food.unit}{food.protein ? ` · P:${food.protein}g C:${food.carbs}g G:${food.fat}g` : ''}</p>
+
+                        {/* Calorias + botão substituição */}
+                        <div style={{ display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
+                          {food.calories ? <span style={{ fontSize:12, color: checked ? '#E8FF00' : 'var(--text-2)', fontWeight: checked ? 700 : 400 }}>{food.calories} kcal</span> : null}
+                          {food.calories ? (
+                            <button
+                              onClick={e => { e.stopPropagation(); setSubFood(food); setSubSearch('') }}
+                              title="Ver substituições"
+                              style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-2)', padding:'4px 6px', display:'flex', alignItems:'center', borderRadius:6, flexShrink:0 }}>
+                              <ArrowLeftRight size={13} />
+                            </button>
+                          ) : null}
                         </div>
-                        {food.calories ? <span style={{ fontSize:12, color: checked ? '#E8FF00' : 'var(--text-2)', fontWeight: checked ? 700 : 400, flexShrink:0 }}>{food.calories} kcal</span> : null}
-                      </button>
+                      </div>
                     )
                   })}
                 </div>
@@ -342,7 +426,109 @@ export default function StudentDiet() {
         </div>
       </div>
 
+      {/* ── Modal de Substituição ── */}
+      {subFood && (
+        <div
+          style={{ position:'fixed', inset:0, zIndex:100, backgroundColor:'rgba(0,0,0,0.7)', display:'flex', flexDirection:'column', justifyContent:'flex-end' }}
+          onClick={() => { setSubFood(null); setSubSearch('') }}
+        >
+          <div
+            style={{ backgroundColor:'var(--bg)', borderRadius:'20px 20px 0 0', maxHeight:'85vh', display:'flex', flexDirection:'column', overflow:'hidden' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header do modal */}
+            <div style={{ padding:'16px 20px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+              <div>
+                <p style={{ fontSize:11, color:'var(--text-2)', margin:'0 0 2px', textTransform:'uppercase', letterSpacing:1 }}>Substituir</p>
+                <p style={{ fontSize:16, fontWeight:900, color:'var(--text)', margin:0 }}>{subFood.name}</p>
+                <p style={{ fontSize:12, color:'var(--text-2)', margin:'2px 0 0' }}>
+                  {subFood.quantity} {subFood.unit} · <span style={{ color:'#E8FF00', fontWeight:700 }}>{subFood.calories} kcal</span>
+                </p>
+              </div>
+              <button onClick={() => { setSubFood(null); setSubSearch('') }}
+                style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-2)', padding:8, display:'flex', alignItems:'center' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Campo de busca */}
+            <div style={{ padding:'12px 20px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+              <div style={{ position:'relative' }}>
+                <Search size={14} style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', color:'var(--text-2)' }} />
+                <input
+                  type="text"
+                  placeholder="Buscar substituto..."
+                  value={subSearch}
+                  onChange={e => setSubSearch(e.target.value)}
+                  style={{ width:'100%', padding:'10px 12px 10px 34px', backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:10, color:'var(--text)', fontSize:14, outline:'none', boxSizing:'border-box' }}
+                />
+              </div>
+            </div>
+
+            {/* Lista de substitutos */}
+            <div style={{ overflowY:'auto', flex:1 }}>
+              {dietSubstitutes.length === 0 && libSubstitutes.length === 0 ? (
+                <div style={{ padding:'48px 20px', textAlign:'center' }}>
+                  <ArrowLeftRight size={32} color="var(--border)" style={{ margin:'0 auto 12px' }} />
+                  <p style={{ fontSize:14, color:'var(--text-2)', margin:0 }}>
+                    {subSearch ? 'Nenhum substituto encontrado para essa busca.' : 'Nenhum substituto disponível no momento.'}
+                  </p>
+                  {!subSearch && libFoods.length === 0 && (
+                    <p style={{ fontSize:12, color:'var(--text-2)', margin:'8px 0 0' }}>A biblioteca de alimentos ainda não foi cadastrada.</p>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {dietSubstitutes.length > 0 && (
+                    <div>
+                      <p style={{ fontSize:11, color:'var(--text-2)', textTransform:'uppercase', letterSpacing:1, padding:'14px 20px 8px', margin:0, fontWeight:700 }}>
+                        Da sua dieta
+                      </p>
+                      {dietSubstitutes.map(item => (
+                        <SubstituteCard key={item.id} name={item.name} new_qty={item.new_qty} unit={item.unit} target_cal={subFood.calories!} protein={item.protein} carbs={item.carbs} fat={item.fat} />
+                      ))}
+                    </div>
+                  )}
+
+                  {libSubstitutes.length > 0 && (
+                    <div>
+                      <p style={{ fontSize:11, color:'var(--text-2)', textTransform:'uppercase', letterSpacing:1, padding:'14px 20px 8px', margin:0, fontWeight:700 }}>
+                        Biblioteca de alimentos
+                      </p>
+                      {libSubstitutes.map(item => (
+                        <SubstituteCard key={item.id} name={item.name} new_qty={item.new_qty} unit={item.unit} target_cal={subFood.calories!} protein={item.protein} carbs={item.carbs} fat={item.fat} />
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+              {/* Espaço no final para mobile */}
+              <div style={{ height: 24 }} />
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+    </div>
+  )
+}
+
+function SubstituteCard({ name, new_qty, unit, target_cal, protein, carbs, fat }: { name: string; new_qty: number; unit: string; target_cal: number; protein: number; carbs: number; fat: number }) {
+  const qtyDisplay = new_qty < 10
+    ? `${(Math.round(new_qty * 10) / 10)} ${unit}`
+    : `${Math.round(new_qty)} ${unit}`
+  const hasMacros = protein > 0 || carbs > 0 || fat > 0
+  return (
+    <div style={{ padding:'12px 20px', borderBottom:'1px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+      <div style={{ minWidth:0, flex:1 }}>
+        <p style={{ fontSize:14, fontWeight:600, color:'var(--text)', margin:'0 0 2px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{name}</p>
+        <p style={{ fontSize:12, color:'var(--text-2)', margin:0 }}>
+          <span style={{ fontWeight:700, color:'var(--text)' }}>{qtyDisplay}</span>
+          {hasMacros && ` · P:${Math.round(protein)}g C:${Math.round(carbs)}g G:${Math.round(fat)}g`}
+        </p>
+      </div>
+      <span style={{ fontSize:13, fontWeight:700, color:'#E8FF00', flexShrink:0 }}>{Math.round(target_cal)} kcal</span>
     </div>
   )
 }

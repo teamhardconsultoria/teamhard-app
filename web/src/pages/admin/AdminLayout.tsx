@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Dumbbell, FileText, LogOut, ArrowLeft, Users, Sun, Moon, Headphones, ScrollText, Settings2 } from 'lucide-react'
+import { LayoutDashboard, Dumbbell, FileText, LogOut, ArrowLeft, Users, Sun, Moon, Headphones, ScrollText, Settings2, Utensils } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '../../store/auth'
 import { getTheme, toggleTheme } from '../../store/theme'
@@ -9,6 +9,7 @@ const navItems = [
   { to: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/admin/coaches', icon: Users, label: 'Coaches' },
   { to: '/admin/exercises', icon: Dumbbell, label: 'Exercícios' },
+  { to: '/admin/foods', icon: Utensils, label: 'Alimentos' },
   { to: '/admin/templates', icon: FileText, label: 'Templates' },
   { to: '/admin/support', icon: Headphones, label: 'Suporte' },
   { to: '/admin/activity', icon: ScrollText, label: 'Atividades' },
