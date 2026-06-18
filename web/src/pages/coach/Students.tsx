@@ -88,6 +88,7 @@ export default function Students() {
   // Invite modal
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteCoachId, setInviteCoachId] = useState('')
   const [inviteUrl, setInviteUrl] = useState('')
   const [inviteLoading, setInviteLoading] = useState(false)
   const [inviteError, setInviteError] = useState('')
@@ -194,17 +195,18 @@ export default function Students() {
   }
 
   const openInviteModal = () => {
-    setInviteEmail(''); setInviteUrl(''); setInviteError(''); setInviteCopied(false); setInviteEmailSent(false)
+    setInviteEmail(''); setInviteCoachId(''); setInviteUrl(''); setInviteError(''); setInviteCopied(false); setInviteEmailSent(false)
     setShowInviteModal(true)
   }
 
   const handleGenerateInvite = async () => {
+    if (isSuperAdmin && !inviteCoachId) { setInviteError('Selecione um coach.'); return }
     setInviteError('')
     setInviteLoading(true)
     const emailToSend = inviteEmail.trim().toLowerCase()
     try {
       const { data, error: fnError } = await supabase.functions.invoke('generate-invite', {
-        body: { email: emailToSend || null },
+        body: { email: emailToSend || null, coach_id: isSuperAdmin ? inviteCoachId : undefined },
       })
       if (fnError || data?.error) { setInviteError(data?.error || 'Erro ao gerar link.'); return }
       setInviteUrl(data.invite_url)
@@ -351,18 +353,16 @@ export default function Students() {
             )}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            {!isSuperAdmin && (
-              <button
-                onClick={openInviteModal}
-                title="Enviar link de cadastro ao aluno"
-                style={{ display: 'flex', alignItems: 'center', gap: 8, backgroundColor: 'var(--surface)', color: 'var(--text)', fontWeight: 700, padding: '10px 16px', borderRadius: 10, fontSize: 14, border: '1px solid var(--border)', cursor: 'pointer' }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = '#E8FF00')}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
-              >
-                <Link2 size={16} />
-                {!isMobile && 'Convidar'}
-              </button>
-            )}
+            <button
+              onClick={openInviteModal}
+              title="Enviar link de cadastro ao aluno"
+              style={{ display: 'flex', alignItems: 'center', gap: 8, backgroundColor: 'var(--surface)', color: 'var(--text)', fontWeight: 700, padding: '10px 16px', borderRadius: 10, fontSize: 14, border: '1px solid var(--border)', cursor: 'pointer' }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = '#E8FF00')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+            >
+              <Link2 size={16} />
+              {!isMobile && 'Convidar'}
+            </button>
             <button
               onClick={openModal}
               style={{ display: 'flex', alignItems: 'center', gap: 8, backgroundColor: '#E8FF00', color: '#0A0A0A', fontWeight: 700, padding: '10px 16px', borderRadius: 10, fontSize: 14, border: 'none', cursor: 'pointer' }}
@@ -652,6 +652,26 @@ export default function Students() {
                   <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0, lineHeight: 1.6 }}>
                     Gere um link de cadastro e envie ao aluno. Ele preencherá os próprios dados — você define o plano depois.
                   </p>
+                  {isSuperAdmin && (
+                    <ModalField label="Coach *">
+                      <select
+                        value={inviteCoachId}
+                        onChange={e => setInviteCoachId(e.target.value)}
+                        style={{ width: '100%', padding: '12px 14px', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, color: inviteCoachId ? 'var(--text)' : 'var(--text-3)', fontSize: 14, outline: 'none' }}
+                        onFocus={async e => {
+                          e.currentTarget.style.borderColor = '#E8FF00'
+                          if (allCoaches.length === 0) {
+                            const { data } = await supabase.from('coaches').select('id, users!coaches_user_id_fkey(name)').order('created_at')
+                            setAllCoaches(((data ?? []) as any[]).map(c => ({ id: c.id, name: c.users?.name ?? 'Sem nome' })))
+                          }
+                        }}
+                        onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+                      >
+                        <option value="">Selecione um coach...</option>
+                        {allCoaches.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </ModalField>
+                  )}
                   <ModalField label="E-mail do aluno (opcional)">
                     <ModalInput
                       type="email"

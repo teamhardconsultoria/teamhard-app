@@ -78,24 +78,42 @@ serve(async (req) => {
       })
     }
 
-    const { data: coach } = await supabase
-      .from('coaches')
-      .select('id')
-      .eq('user_id', user.id)
+    const { data: userProfile } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
       .single()
 
-    if (!coach) {
-      return new Response(JSON.stringify({ error: 'Coach não encontrado.' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
+    const { email, coach_id: coachIdOverride } = await req.json()
 
-    const { email } = await req.json()
+    let coachId: string
+
+    if (userProfile?.role === 'super_admin') {
+      if (!coachIdOverride) {
+        return new Response(JSON.stringify({ error: 'Selecione um coach.' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      coachId = coachIdOverride
+    } else {
+      const { data: coach } = await supabase
+        .from('coaches')
+        .select('id')
+        .eq('user_id', user.id)
+        .single()
+
+      if (!coach) {
+        return new Response(JSON.stringify({ error: 'Coach não encontrado.' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+      coachId = coach.id
+    }
 
     const { data: invite, error: inviteError } = await supabase
       .from('student_invites')
       .insert({
-        coach_id: coach.id,
+        coach_id: coachId,
         email: email ? email.trim().toLowerCase() : null,
       })
       .select('token')
