@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/auth'
 import LoginPage from './pages/LoginPage'
+import RegisterPage from './pages/RegisterPage'
 import CoachLayout from './pages/coach/CoachLayout'
 import Dashboard from './pages/coach/Dashboard'
 import Students from './pages/coach/Students'
@@ -61,6 +62,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/register/:token" element={<RegisterPage />} />
 
       {/* Painel do Coach */}
       <Route path="/coach" element={

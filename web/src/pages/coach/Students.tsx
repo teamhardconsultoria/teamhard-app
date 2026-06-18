@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, ChevronRight, X, Copy, Check, MessageCircle, ArrowLeftRight, UserCheck, UserX, AlertCircle, ClipboardList, RefreshCw, Cake } from 'lucide-react'
+import { Search, Plus, ChevronRight, X, Copy, Check, MessageCircle, ArrowLeftRight, UserCheck, UserX, AlertCircle, ClipboardList, RefreshCw, Cake, Link2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -10,9 +10,9 @@ interface StudentRow {
   coach_id?: string
   user: { name: string; email: string }
   coaches?: { users: { name: string } }
-  plan_type: string
+  plan_type: string | null
   payment_status: string
-  plan_end: string
+  plan_end: string | null
 }
 
 interface CoachOption {
@@ -36,7 +36,7 @@ const STATUS_LABEL: Record<string, string> = {
   active: 'Ativo', pending: 'Pendente', overdue: 'Em atraso', blocked: 'Bloqueado',
 }
 const PLAN_LABEL: Record<string, string> = {
-  monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual', permuta: 'Permuta', legado: 'Legado',
+  monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', annual: 'Anual', permuta: 'Permuta', legado: 'Legado', pending: 'Aguardando plano',
 }
 const PLAN_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12, permuta: 12, legado: 6 }
 const PLAN_DEFAULTS: Record<string, number> = { monthly: 397, quarterly: 741 }
@@ -84,6 +84,15 @@ export default function Students() {
   const [contractSending, setContractSending] = useState(false)
   const [contractLink, setContractLink] = useState('')
   const [contractError, setContractError] = useState('')
+
+  // Invite modal
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteUrl, setInviteUrl] = useState('')
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [inviteError, setInviteError] = useState('')
+  const [inviteCopied, setInviteCopied] = useState(false)
+  const [inviteEmailSent, setInviteEmailSent] = useState(false)
 
   // Migrate modal (super_admin only)
   const [migrateStudent, setMigrateStudent] = useState<StudentRow | null>(null)
@@ -182,6 +191,35 @@ export default function Students() {
   const closeModal = () => {
     setShowModal(false); setCreatedPassword(''); setCreatedPhone(null); setError('')
     setCreatedStudentId(null); setContractLink(''); setContractError('')
+  }
+
+  const openInviteModal = () => {
+    setInviteEmail(''); setInviteUrl(''); setInviteError(''); setInviteCopied(false); setInviteEmailSent(false)
+    setShowInviteModal(true)
+  }
+
+  const handleGenerateInvite = async () => {
+    setInviteError('')
+    setInviteLoading(true)
+    const emailToSend = inviteEmail.trim().toLowerCase()
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke('generate-invite', {
+        body: { email: emailToSend || null },
+      })
+      if (fnError || data?.error) { setInviteError(data?.error || 'Erro ao gerar link.'); return }
+      setInviteUrl(data.invite_url)
+      if (emailToSend) setInviteEmailSent(true)
+    } catch (e: any) {
+      setInviteError(e.message || 'Erro inesperado.')
+    } finally {
+      setInviteLoading(false)
+    }
+  }
+
+  const copyInviteUrl = () => {
+    navigator.clipboard.writeText(inviteUrl)
+    setInviteCopied(true)
+    setTimeout(() => setInviteCopied(false), 2000)
   }
 
   const handleCreate = async () => {
@@ -312,15 +350,29 @@ export default function Students() {
               </span>
             )}
           </div>
-          <button
-            onClick={openModal}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, backgroundColor: '#E8FF00', color: '#0A0A0A', fontWeight: 700, padding: '10px 16px', borderRadius: 10, fontSize: 14, border: 'none', cursor: 'pointer' }}
-            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#d4e800')}
-            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#E8FF00')}
-          >
-            <Plus size={16} />
-            Novo Aluno
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {!isSuperAdmin && (
+              <button
+                onClick={openInviteModal}
+                title="Enviar link de cadastro ao aluno"
+                style={{ display: 'flex', alignItems: 'center', gap: 8, backgroundColor: 'var(--surface)', color: 'var(--text)', fontWeight: 700, padding: '10px 16px', borderRadius: 10, fontSize: 14, border: '1px solid var(--border)', cursor: 'pointer' }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = '#E8FF00')}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+              >
+                <Link2 size={16} />
+                {!isMobile && 'Convidar'}
+              </button>
+            )}
+            <button
+              onClick={openModal}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, backgroundColor: '#E8FF00', color: '#0A0A0A', fontWeight: 700, padding: '10px 16px', borderRadius: 10, fontSize: 14, border: 'none', cursor: 'pointer' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#d4e800')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#E8FF00')}
+            >
+              <Plus size={16} />
+              {!isMobile && 'Novo Aluno'}
+            </button>
+          </div>
         </div>
 
         {/* Cards de resumo (apenas coach) */}
@@ -578,6 +630,80 @@ export default function Students() {
         </div>
       )}
 
+      {/* Modal: convidar aluno */}
+      {showInviteModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+          <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, width: '100%', maxWidth: 420 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(232,255,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Link2 size={16} color="#E8FF00" />
+                </div>
+                <h2 style={{ fontSize: 17, fontWeight: 900, color: 'var(--text)', margin: 0 }}>Convidar Aluno</h2>
+              </div>
+              <button onClick={() => setShowInviteModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-2)', cursor: 'pointer', padding: 4 }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {!inviteUrl ? (
+                <>
+                  <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0, lineHeight: 1.6 }}>
+                    Gere um link de cadastro e envie ao aluno. Ele preencherá os próprios dados — você define o plano depois.
+                  </p>
+                  <ModalField label="E-mail do aluno (opcional)">
+                    <ModalInput
+                      type="email"
+                      placeholder="aluno@email.com"
+                      value={inviteEmail}
+                      onChange={v => setInviteEmail(v)}
+                    />
+                  </ModalField>
+                  {inviteEmail.trim() && (
+                    <div style={{ backgroundColor: 'rgba(232,255,0,0.05)', border: '1px solid rgba(232,255,0,0.15)', borderRadius: 10, padding: '10px 12px' }}>
+                      <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0 }}>
+                        O link será enviado por e-mail para <span style={{ color: '#E8FF00', fontWeight: 700 }}>{inviteEmail.trim()}</span> automaticamente.
+                      </p>
+                    </div>
+                  )}
+                  {inviteError && <p style={{ color: '#FF4444', fontSize: 13, margin: 0 }}>{inviteError}</p>}
+                  <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                    <ModalBtn onClick={() => setShowInviteModal(false)}>Cancelar</ModalBtn>
+                    <ModalBtn primary onClick={handleGenerateInvite} disabled={inviteLoading} style={{ flex: 2 }}>
+                      {inviteLoading
+                        ? <div style={{ width: 16, height: 16, border: '2px solid #0A0A0A', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                        : <><Link2 size={15} /> Gerar Link</>}
+                    </ModalBtn>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {inviteEmailSent && (
+                    <div style={{ backgroundColor: 'rgba(0,200,83,0.08)', border: '1px solid rgba(0,200,83,0.25)', borderRadius: 10, padding: '12px 14px' }}>
+                      <p style={{ fontSize: 13, color: '#00C853', fontWeight: 700, margin: 0 }}>E-mail enviado para {inviteEmail}!</p>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <p style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 1, margin: 0 }}>Link de cadastro</p>
+                    <div style={{ backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px' }}>
+                      <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0, wordBreak: 'break-all' }}>{inviteUrl}</p>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>Este link expira em 7 dias e só pode ser usado uma vez.</p>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <ModalBtn onClick={() => setShowInviteModal(false)}>Fechar</ModalBtn>
+                    <ModalBtn primary onClick={copyInviteUrl} style={{ flex: 2 }}>
+                      {inviteCopied ? <><Check size={15} /> Copiado!</> : <><Copy size={15} /> Copiar Link</>}
+                    </ModalBtn>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal: migrar treinador */}
       {migrateStudent && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
@@ -682,7 +808,9 @@ function StudentCard({ student, isSuperAdmin, onClick, onMigrate }: {
           <div style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color, flexShrink: 0 }} />
           <span style={{ fontSize: 11, fontWeight: 600, color }}>{STATUS_LABEL[student.payment_status]}</span>
           <span style={{ fontSize: 11, color: 'var(--text-3)' }}>·</span>
-          <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{PLAN_LABEL[student.plan_type]}</span>
+          <span style={{ fontSize: 11, color: student.plan_type ? 'var(--text-2)' : '#E8FF00' }}>
+            {student.plan_type ? (PLAN_LABEL[student.plan_type] ?? student.plan_type) : 'Aguardando plano'}
+          </span>
           {isSuperAdmin && coachName && (
             <>
               <span style={{ fontSize: 11, color: 'var(--text-3)' }}>·</span>
