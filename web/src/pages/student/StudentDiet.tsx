@@ -343,32 +343,36 @@ export default function StudentDiet() {
                     const checked = !!checks[food.id]
                     return (
                       <div key={food.id}
-                        style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 16px', borderBottom:'1px solid var(--border)', backgroundColor: checked ? 'rgba(232,255,0,0.04)' : 'transparent', width:'100%' }}>
+                        style={{ display:'flex', alignItems:'flex-start', gap:12, padding:'10px 16px', borderBottom:'1px solid var(--border)', backgroundColor: checked ? 'rgba(232,255,0,0.04)' : 'transparent', width:'100%' }}>
 
-                        {/* Área clicável (checkbox toggle) */}
+                        {/* Checkbox */}
                         <div onClick={() => toggleCheck(food.id)}
-                          style={{ display:'flex', alignItems:'center', gap:12, flex:1, minWidth:0, cursor: finalized ? 'default' : 'pointer' }}>
-                          <div style={{ width:20, height:20, borderRadius:5, border:`2px solid ${checked ? '#E8FF00' : 'var(--border)'}`, backgroundColor: checked ? '#E8FF00' : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, transition:'all 0.15s' }}>
+                          style={{ paddingTop:2, cursor: finalized ? 'default' : 'pointer', flexShrink:0 }}>
+                          <div style={{ width:20, height:20, borderRadius:5, border:`2px solid ${checked ? '#E8FF00' : 'var(--border)'}`, backgroundColor: checked ? '#E8FF00' : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }}>
                             {checked && <span style={{ fontSize:12, fontWeight:900, color:'#0A0A0A', lineHeight:1 }}>✓</span>}
                           </div>
-                          <div style={{ flex:1, minWidth:0 }}>
+                        </div>
+
+                        {/* Nome + macros + botão substituições */}
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div onClick={() => toggleCheck(food.id)} style={{ cursor: finalized ? 'default' : 'pointer' }}>
                             <p style={{ fontSize:13, color: checked ? 'var(--text-2)' : 'var(--text)', margin:0, textDecoration: checked ? 'line-through' : 'none' }}>{food.name}</p>
                             <p style={{ fontSize:11, color:'var(--text-2)', margin:'2px 0 0' }}>{food.quantity} {food.unit}{food.protein ? ` · P:${Math.round((food.protein||0)*10)/10}g C:${Math.round((food.carbs||0)*10)/10}g G:${Math.round((food.fat||0)*10)/10}g` : ''}</p>
                           </div>
-                        </div>
-
-                        {/* Calorias + botão substituição */}
-                        <div style={{ display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
-                          {food.calories ? <span style={{ fontSize:12, color: checked ? '#E8FF00' : 'var(--text-2)', fontWeight: checked ? 700 : 400 }}>{food.calories} kcal</span> : null}
                           {food.calories ? (
                             <button
                               onClick={e => { e.stopPropagation(); setSubFood(food); setSubSearch('') }}
-                              title="Ver substituições"
-                              style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-2)', padding:'4px 6px', display:'flex', alignItems:'center', borderRadius:6, flexShrink:0 }}>
-                              <ArrowLeftRight size={13} />
+                              style={{ marginTop:6, display:'inline-flex', alignItems:'center', gap:5, background:'rgba(232,255,0,0.07)', border:'1px solid rgba(232,255,0,0.25)', borderRadius:6, padding:'5px 10px', cursor:'pointer', color:'#E8FF00', fontSize:11, fontWeight:700, letterSpacing:0.3 }}>
+                              <ArrowLeftRight size={11} />
+                              Substituições
                             </button>
                           ) : null}
                         </div>
+
+                        {/* Calorias */}
+                        {food.calories ? (
+                          <span style={{ fontSize:12, color: checked ? '#E8FF00' : 'var(--text-2)', fontWeight: checked ? 700 : 400, flexShrink:0, paddingTop:2 }}>{food.calories} kcal</span>
+                        ) : null}
                       </div>
                     )
                   })}
