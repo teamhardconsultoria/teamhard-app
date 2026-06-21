@@ -252,12 +252,15 @@ export default function Students() {
       // Gera cronograma de parcelas se valor informado
       if (form.amount && parseFloat(form.amount) > 0 && data.student_id) {
         const totalInst = getInstallmentCount(form.payment_method, form.plan_type, form.installment_count)
+        // Boleto: primeira parcela ainda não paga (aguarda compensação). Demais métodos: já recebida.
+        const firstPaid = form.payment_method !== 'boleto'
         await supabase.rpc('generate_payment_schedule', {
           p_student_id: data.student_id,
           p_plan_end: calcPlanEnd(form.plan_start, form.plan_type),
           p_plan_type: form.plan_type,
           p_amount_per_inst: parseFloat(form.amount) / totalInst,
           p_total_installments: totalInst,
+          p_first_paid: firstPaid,
         })
       }
 
@@ -547,7 +550,7 @@ export default function Students() {
                         {form.plan_type === 'quarterly' ? (
                           <>
                             <option value="subscription">Crédito recorrente</option>
-                            <option value="credit">Crédito 3x</option>
+                            <option value="credit">Crédito parcelado</option>
                             <option value="pix_auto">PIX automático</option>
                           </>
                         ) : (
@@ -605,11 +608,23 @@ export default function Students() {
                     {form.amount && parseFloat(form.amount) > 0 && (() => {
                       const totalInst = getInstallmentCount(form.payment_method, form.plan_type, form.installment_count)
                       const amtPerInst = parseFloat(form.amount) / totalInst
+                      const firstPaid = form.payment_method !== 'boleto'
+                      const startDate = new Date(form.plan_start + 'T12:00:00')
                       return (
-                        <div style={{ backgroundColor: 'rgba(232,255,0,0.05)', border: '1px solid rgba(232,255,0,0.15)', borderRadius: 10, padding: '10px 12px' }}>
+                        <div style={{ backgroundColor: 'rgba(232,255,0,0.05)', border: '1px solid rgba(232,255,0,0.15)', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
                           <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0 }}>
-                            Cronograma: <span style={{ color: '#E8FF00', fontWeight: 700 }}>{totalInst}x de R${amtPerInst.toFixed(2).replace('.', ',')}</span>, 1ª parcela em <span style={{ color: 'var(--text)', fontWeight: 600 }}>{new Date(form.plan_start + 'T12:00:00').toLocaleDateString('pt-BR')}</span>.
+                            Cronograma: <span style={{ color: '#E8FF00', fontWeight: 700 }}>{totalInst}x de R${amtPerInst.toFixed(2).replace('.', ',')}</span>
                           </p>
+                          {Array.from({ length: totalInst }, (_, i) => {
+                            const d = new Date(startDate)
+                            d.setMonth(d.getMonth() + i)
+                            const isPaid = i === 0 && firstPaid
+                            return (
+                              <p key={i} style={{ fontSize: 11, color: isPaid ? '#00C853' : 'var(--text-3)', margin: 0 }}>
+                                {i + 1}ª — {d.toLocaleDateString('pt-BR')} {isPaid ? '✓ paga' : '· pendente'}
+                              </p>
+                            )
+                          })}
                         </div>
                       )
                     })()}

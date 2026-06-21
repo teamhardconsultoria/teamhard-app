@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Plus, Trash2, ChevronDown, X, Search, GripVertical } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, X, Search, GripVertical, Sparkles, Save } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import { sendPushToStudent } from '../../lib/push'
@@ -43,6 +43,12 @@ export default function DietBuilder() {
   const [dragOverMeal, setDragOverMeal] = useState<{ di: number; mi: number } | null>(null)
   const dragMealSrc = useRef<{ di: number; mi: number } | null>(null)
   const dragMealAllowed = useRef(false)
+
+  const [aiStep, setAiStep] = useState<'idle'|'params'|'loading'|'result'>('idle')
+  const [aiGoalMode, setAiGoalMode] = useState<'emagrecer'|'ganhar_massa'|'recomposicao'>('emagrecer')
+  const [aiActivityFactor, setAiActivityFactor] = useState(1.375)
+  const [aiResult, setAiResult] = useState<any>(null)
+  const [aiError, setAiError] = useState('')
 
   const moveMeal = (di: number, from: number, to: number) => {
     if (from === to) return
@@ -98,6 +104,42 @@ export default function DietBuilder() {
   const patchFood = (di: number, mi: number, fi: number, patch: Partial<Food>) => setDays(prev => prev.map((d, i) => i !== di ? d : { ...d, meals: d.meals.map((m, j) => j !== mi ? m : { ...m, foods: m.foods.map((f, k) => k !== fi ? f : { ...f, ...patch }) }) }))
   const selectTacoFood = (di: number, mi: number, fi: number, taco: TacoFood, qty: number) => patchFood(di, mi, fi, { name: taco.nome, unit: 'g', taco, ...calcMacros(taco, qty) })
   const handleQtyChange = (di: number, mi: number, fi: number, food: Food, qty: number) => patchFood(di, mi, fi, food.taco ? { quantity: qty, ...calcMacros(food.taco, qty) } : { quantity: qty })
+
+  const generateWithAI = async () => {
+    setAiStep('loading'); setAiError('')
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-ai-plan', {
+        body: { student_id: studentId, type: 'diet', goal_mode: aiGoalMode, activity_factor_override: aiActivityFactor },
+      })
+      if (error || data?.error) { setAiError(data?.error || error?.message || 'Erro'); setAiStep('params'); return }
+      setAiResult(data.plan); setAiStep('result')
+    } catch (e: any) { setAiError(e.message || 'Erro inesperado'); setAiStep('params') }
+  }
+
+  const applyAIDiet = (plan: any) => {
+    setDietName(plan.diet_name || '')
+    const today = new Date().toISOString().split('T')[0]
+    setValidFrom(today)
+    const end = new Date(); end.setMonth(end.getMonth() + 3)
+    setValidTo(end.toISOString().split('T')[0])
+    const newDays: DietDay[] = (plan.days || []).map((d: any) => ({
+      label: d.label || 'Dia',
+      weekday: [],
+      calorie_goal: d.calorie_goal || 0,
+      collapsed: false,
+      meals: (d.meals || []).map((m: any) => ({
+        name: m.name || '',
+        suggested_time: m.suggested_time || '',
+        collapsed: false,
+        foods: (m.foods || []).map((f: any) => ({
+          name: f.name || '', quantity: f.quantity || 100, unit: f.unit || 'g',
+          calories: f.calories || 0, protein: f.protein || 0, carbs: f.carbs || 0, fat: f.fat || 0, taco: null,
+        })),
+      })),
+    }))
+    setDays(newDays)
+    setAiStep('idle'); setAiResult(null)
+  }
 
   const handleSave = async () => {
     if (!dietName.trim() || !validFrom || !validTo) { alert('Preencha nome, início e fim da dieta.'); return }
@@ -156,9 +198,15 @@ export default function DietBuilder() {
     <div style={{ flex: 1, overflowY: 'auto', backgroundColor: 'var(--bg)' }}>
       <div style={{ padding: 32, paddingTop: 40, paddingBottom: 48, maxWidth: 900 }}>
 
-        <div style={{ marginBottom: 28 }}>
-          <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0 }}>{isEditing ? 'Editar dieta de' : 'Nova dieta para'}</p>
-          <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--text)', margin: '4px 0 0 0' }}>{studentName || '...'}</h1>
+        <div style={{ marginBottom: 28, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0 }}>{isEditing ? 'Editar dieta de' : 'Nova dieta para'}</p>
+            <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--text)', margin: '4px 0 0 0' }}>{studentName || '...'}</h1>
+          </div>
+          <button onClick={() => { setAiStep('params'); setAiError('') }}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', backgroundColor: 'rgba(232,255,0,0.08)', border: '1px solid rgba(232,255,0,0.3)', borderRadius: 12, color: '#E8FF00', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0, marginTop: 6 }}>
+            <Sparkles size={15} /> Gerar com IA
+          </button>
         </div>
 
         {/* Info geral */}
@@ -332,6 +380,193 @@ export default function DietBuilder() {
           <SaveBtn onClick={handleSave} saving={saving}>{isEditing ? 'Salvar Alterações' : 'Salvar Dieta'}</SaveBtn>
         </div>
       </div>
+
+      {/* ── Modal IA ─────────────────────────────────────────────────────── */}
+      {aiStep !== 'idle' && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+
+          {/* Params */}
+          {aiStep === 'params' && (
+            <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, width: '100%', maxWidth: 420 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Sparkles size={18} color="#E8FF00" />
+                  <h2 style={{ fontSize: 16, fontWeight: 900, color: 'var(--text)', margin: 0 }}>Gerar Dieta com IA</h2>
+                </div>
+                <button onClick={() => setAiStep('idle')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', padding: 4 }}><X size={20} /></button>
+              </div>
+              <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0 }}>A IA vai analisar anamnese, avaliação física e fotos para gerar um plano alimentar personalizado.</p>
+                <div>
+                  <label style={lbl}>Objetivo da dieta</label>
+                  <select value={aiGoalMode} onChange={e => setAiGoalMode(e.target.value as any)} style={{ ...inp(), colorScheme: 'dark' }}>
+                    <option value="emagrecer">Emagrecimento (déficit calórico)</option>
+                    <option value="ganhar_massa">Ganho de Massa (superávit)</option>
+                    <option value="recomposicao">Recomposição Corporal (manutenção)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={lbl}>Fator de atividade para GET</label>
+                  <select value={aiActivityFactor} onChange={e => setAiActivityFactor(parseFloat(e.target.value))} style={{ ...inp(), colorScheme: 'dark' }}>
+                    <option value={1.2}>Sedentário (1,20) — sem exercício</option>
+                    <option value={1.375}>Levemente ativo (1,375) — 1–3×/semana</option>
+                    <option value={1.55}>Moderadamente ativo (1,55) — 3–5×/semana</option>
+                    <option value={1.725}>Muito ativo (1,725) — 6–7×/semana</option>
+                    <option value={1.9}>Extremamente ativo (1,90) — atleta</option>
+                  </select>
+                </div>
+                {aiError && <p style={{ color: '#FF4444', fontSize: 13, margin: 0 }}>{aiError}</p>}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => setAiStep('idle')} style={{ flex: 1, padding: '11px 0', border: '1px solid var(--border)', borderRadius: 12, background: 'none', color: 'var(--text-2)', fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
+                  <button onClick={generateWithAI} style={{ flex: 2, padding: '11px 0', backgroundColor: '#E8FF00', border: 'none', borderRadius: 12, color: '#0A0A0A', fontSize: 14, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <Sparkles size={15} /> Gerar Dieta
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Loading */}
+          {aiStep === 'loading' && (
+            <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: '40px 48px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+              <div style={{ width: 40, height: 40, border: '3px solid rgba(232,255,0,0.15)', borderTopColor: '#E8FF00', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              <div style={{ textAlign: 'center' }}>
+                <p style={{ color: 'var(--text)', fontWeight: 700, margin: 0 }}>Gerando dieta…</p>
+                <p style={{ color: 'var(--text-2)', fontSize: 13, margin: '4px 0 0 0' }}>Analisando perfil e fotos — pode levar 20–40 s</p>
+              </div>
+            </div>
+          )}
+
+          {/* Result */}
+          {aiStep === 'result' && aiResult && (
+            <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, width: '100%', maxWidth: 680, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Sparkles size={18} color="#E8FF00" />
+                  <h2 style={{ fontSize: 16, fontWeight: 900, color: 'var(--text)', margin: 0 }}>Dieta Gerada por IA</h2>
+                </div>
+                <button onClick={() => { setAiStep('idle'); setAiResult(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', padding: 4 }}><X size={20} /></button>
+              </div>
+
+              <div style={{ overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16, flex: 1 }}>
+                {aiResult.needs_info && (
+                  <div style={{ backgroundColor: 'rgba(255,165,0,0.08)', border: '1px solid rgba(255,165,0,0.3)', borderRadius: 12, padding: '12px 16px' }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: '#FFA500', margin: '0 0 4px 0' }}>⚠ IA precisa de informação adicional:</p>
+                    <p style={{ fontSize: 13, color: 'var(--text)', margin: 0 }}>{aiResult.needs_info}</p>
+                  </div>
+                )}
+
+                {aiResult.visual_bf_estimate && (
+                  <div style={{ backgroundColor: 'rgba(232,255,0,0.04)', border: '1px solid rgba(232,255,0,0.2)', borderRadius: 12, padding: '14px 16px' }}>
+                    <p style={{ fontSize: 10, fontWeight: 700, color: '#E8FF00', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 6px 0' }}>Estimativa Visual por IA (aproximada)</p>
+                    <p style={{ fontSize: 22, fontWeight: 900, color: 'var(--text)', margin: '0 0 4px 0' }}>~{aiResult.visual_bf_estimate.pct}% gordura corporal</p>
+                    <p style={{ fontSize: 12, color: 'var(--text-2)', margin: '0 0 6px 0' }}>Confiança: {aiResult.visual_bf_estimate.confidence} · {aiResult.visual_bf_estimate.note}</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, fontStyle: 'italic' }}>⚠ Não é medição precisa — margem de erro ±5–10 p.p. Confirme com o coach antes de usar nos cálculos.</p>
+                  </div>
+                )}
+
+                {/* Energy summary */}
+                <div style={{ backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px' }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 10px 0' }}>Cálculo Energético</p>
+                  <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 10 }}>
+                    {[
+                      { label: 'TMB', value: `${aiResult.tmb} kcal` },
+                      { label: 'GET', value: `${aiResult.get} kcal` },
+                      { label: 'Meta calórica', value: `${aiResult.calorie_target} kcal`, accent: true },
+                      { label: 'Hidratação', value: `${(aiResult.hydration_ml / 1000).toFixed(1)} L/dia` },
+                    ].map(item => (
+                      <div key={item.label}>
+                        <p style={{ fontSize: 10, color: 'var(--text-2)', margin: '0 0 2px 0' }}>{item.label}</p>
+                        <p style={{ fontSize: 15, fontWeight: 700, color: item.accent ? '#E8FF00' : 'var(--text)', margin: 0 }}>{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {aiResult.macros_summary && (
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      {[
+                        { label: 'Proteína', value: `${aiResult.macros_summary.protein_g}g`, color: '#64B5F6' },
+                        { label: 'Carboidrato', value: `${aiResult.macros_summary.carbs_g}g`, color: '#FFB74D' },
+                        { label: 'Gordura', value: `${aiResult.macros_summary.fat_g}g`, color: '#EF9A9A' },
+                      ].map(m => (
+                        <div key={m.label} style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 12px', textAlign: 'center' }}>
+                          <p style={{ fontSize: 10, color: 'var(--text-2)', margin: '0 0 2px 0' }}>{m.label}</p>
+                          <p style={{ fontSize: 14, fontWeight: 700, color: m.color, margin: 0 }}>{m.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {aiResult.justification?.length > 0 && (
+                  <div>
+                    <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 8px 0' }}>Raciocínio da IA</p>
+                    {(aiResult.justification as string[]).map((j, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, fontSize: 13, color: 'var(--text)', marginBottom: 4 }}>
+                        <span style={{ color: '#E8FF00', flexShrink: 0 }}>•</span><span>{j}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Days preview */}
+                {(aiResult.days || []).map((day: any, di: number) => (
+                  <div key={di}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 6px 0' }}>
+                      {day.label} — {day.calorie_goal} kcal
+                    </p>
+                    {(day.meals || []).map((meal: any, mi: number) => {
+                      const mealCal = (meal.foods || []).reduce((s: number, f: any) => s + (f.calories || 0), 0)
+                      const mealProt = (meal.foods || []).reduce((s: number, f: any) => s + (f.protein || 0), 0)
+                      return (
+                        <div key={mi} style={{ backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 14px', marginBottom: 6 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{meal.name} {meal.suggested_time && <span style={{ color: 'var(--text-2)', fontWeight: 400 }}>· {meal.suggested_time}</span>}</p>
+                            <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{Math.round(mealCal)} kcal · P: {Math.round(mealProt)}g</span>
+                          </div>
+                          {(meal.foods || []).map((f: any, fi: number) => (
+                            <div key={fi} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)', marginBottom: 2 }}>
+                              <span style={{ color: 'var(--text)', minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                              <span style={{ flexShrink: 0 }}>{f.quantity}{f.unit}</span>
+                              <span style={{ flexShrink: 0, color: 'var(--text-3)' }}>{Math.round(f.calories)} kcal</span>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))}
+
+                {aiResult.substitutions && (
+                  <div>
+                    <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 8px 0' }}>Substituições</p>
+                    <div style={{ backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', fontSize: 12, color: 'var(--text-2)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                      {aiResult.substitutions}
+                    </div>
+                  </div>
+                )}
+
+                {aiResult.supplementation_note && (
+                  <div style={{ backgroundColor: 'rgba(100,181,246,0.06)', border: '1px solid rgba(100,181,246,0.2)', borderRadius: 10, padding: '10px 14px' }}>
+                    <p style={{ fontSize: 10, fontWeight: 700, color: '#64B5F6', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 4px 0' }}>Suplementação</p>
+                    <p style={{ fontSize: 12, color: 'var(--text)', margin: 0 }}>{aiResult.supplementation_note}</p>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, padding: '16px 24px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+                <button onClick={() => { setAiStep('idle'); setAiResult(null) }}
+                  style={{ flex: 1, padding: '12px 0', border: '1px solid var(--border)', borderRadius: 12, background: 'none', color: 'var(--text-2)', fontSize: 14, cursor: 'pointer' }}>
+                  Descartar
+                </button>
+                <button onClick={() => applyAIDiet(aiResult)}
+                  style={{ flex: 2, padding: '12px 0', backgroundColor: '#E8FF00', border: 'none', borderRadius: 12, color: '#0A0A0A', fontSize: 14, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <Save size={15} /> Aplicar ao Builder
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Trash2, Search, X, ChevronDown, Save, Youtube, LayoutList, Timer } from 'lucide-react'
+import { Plus, Trash2, Search, X, ChevronDown, Save, Youtube, LayoutList, Timer, Sparkles } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import { sendPushToStudent } from '../../lib/push'
@@ -45,6 +45,11 @@ export default function WorkoutBuilder() {
   const [searchResults, setSearchResults] = useState<Exercise[]>([])
   const [activePickerDay, setActivePickerDay] = useState<number | null>(null)
   const [allExercises, setAllExercises] = useState<Exercise[]>([])
+
+  const [aiStep, setAiStep] = useState<'idle'|'params'|'loading'|'result'>('idle')
+  const [aiTrainingDays, setAiTrainingDays] = useState(3)
+  const [aiResult, setAiResult] = useState<any>(null)
+  const [aiError, setAiError] = useState('')
 
   useEffect(() => {
     fetchStudent()
@@ -167,6 +172,43 @@ export default function WorkoutBuilder() {
   const removeCardio = (dayIdx: number, ci: number) => setDays(prev => prev.map((d, i) => i !== dayIdx ? d : { ...d, cardio: d.cardio.filter((_, j) => j !== ci) }))
   const updateCardioField = (dayIdx: number, ci: number, field: keyof CardioItem, value: any) => setDays(prev => prev.map((d, i) => i !== dayIdx ? d : { ...d, cardio: d.cardio.map((c, j) => j !== ci ? c : { ...c, [field]: value }) }))
 
+  const generateWithAI = async () => {
+    setAiStep('loading'); setAiError('')
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-ai-plan', {
+        body: { student_id: studentId, type: 'workout', training_days: aiTrainingDays },
+      })
+      if (error || data?.error) { setAiError(data?.error || error?.message || 'Erro'); setAiStep('params'); return }
+      setAiResult(data.plan); setAiStep('result')
+    } catch (e: any) { setAiError(e.message || 'Erro inesperado'); setAiStep('params') }
+  }
+
+  const applyAIPlan = (plan: any) => {
+    setWorkoutName(plan.workout_name || '')
+    setPeriodization(plan.periodization || '')
+    const today = new Date().toISOString().split('T')[0]
+    setValidFrom(today)
+    const end = new Date(); end.setMonth(end.getMonth() + (plan.valid_months || 3))
+    setValidTo(end.toISOString().split('T')[0])
+    const newDays: WorkoutDay[] = (plan.days || []).map((d: any, di: number) => ({
+      name: d.name || `Divisão ${di + 1}`,
+      weekday_suggestion: d.weekday_suggestion || [],
+      collapsed: false,
+      exercises: (d.exercises || []).map((ex: any, ei: number) => {
+        const found = allExercises.find(e => e.name.toLowerCase() === (ex.name || '').toLowerCase())
+          ?? allExercises.find(e => e.name.toLowerCase().includes((ex.name || '').toLowerCase().split(' ')[0]))
+        if (!found) return null
+        return { exercise_id: found.id, exercise: found, sets: ex.sets || 3, reps: ex.reps || '10-12', rest_seconds: ex.rest_seconds || 60, coach_notes: ex.coach_notes || '', sort_order: ei }
+      }).filter(Boolean) as WorkoutExercise[],
+      cardio: (d.cardio || []).map((c: any, ci: number) => ({
+        modality: c.modality || 'corrida', duration_min: c.duration_min || 30,
+        intensity: c.intensity || 'moderada', distance_km: '', notes: c.notes || '', sort_order: ci,
+      })),
+    }))
+    setDays(newDays.filter(d => d.exercises.length > 0 || d.cardio.length > 0))
+    setAiStep('idle'); setAiResult(null)
+  }
+
   const handleSave = async () => {
     if (!workoutName.trim() || !validFrom || !validTo) { alert('Preencha nome, data de início e data de fim.'); return }
     if (days.some(d => d.exercises.length === 0 && d.cardio.length === 0)) { alert('Todas as divisões precisam ter pelo menos 1 exercício ou 1 cárdio.'); return }
@@ -229,15 +271,21 @@ export default function WorkoutBuilder() {
     <div style={{ flex: 1, overflowY: 'auto', backgroundColor: 'var(--bg)' }}>
       <div style={{ padding: 32, paddingTop: 40, paddingBottom: 48, maxWidth: 760 }}>
 
-        <div style={{ marginBottom: 28 }}>
-          <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0 }}>{isEditing ? 'Editar treino de' : 'Novo treino para'}</p>
-          <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--text)', margin: '4px 0 0 0' }}>{studentName || '...'}</h1>
-          {templateId && !isEditing && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, padding: '4px 10px', backgroundColor: 'rgba(232,255,0,0.08)', border: '1px solid rgba(232,255,0,0.2)', borderRadius: 20 }}>
-              <LayoutList size={12} color="#E8FF00" />
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#E8FF00' }}>A partir de template — ajuste à vontade</span>
-            </div>
-          )}
+        <div style={{ marginBottom: 28, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0 }}>{isEditing ? 'Editar treino de' : 'Novo treino para'}</p>
+            <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--text)', margin: '4px 0 0 0' }}>{studentName || '...'}</h1>
+            {templateId && !isEditing && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, padding: '4px 10px', backgroundColor: 'rgba(232,255,0,0.08)', border: '1px solid rgba(232,255,0,0.2)', borderRadius: 20 }}>
+                <LayoutList size={12} color="#E8FF00" />
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#E8FF00' }}>A partir de template — ajuste à vontade</span>
+              </div>
+            )}
+          </div>
+          <button onClick={() => { setAiStep('params'); setAiError('') }}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', backgroundColor: 'rgba(232,255,0,0.08)', border: '1px solid rgba(232,255,0,0.3)', borderRadius: 12, color: '#E8FF00', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0, marginTop: 6 }}>
+            <Sparkles size={15} /> Gerar com IA
+          </button>
         </div>
 
         {/* Info geral */}
@@ -485,6 +533,138 @@ export default function WorkoutBuilder() {
           <SaveBtn onClick={handleSave} saving={saving}>{isEditing ? 'Salvar Alterações' : 'Salvar Treino'}</SaveBtn>
         </div>
       </div>
+
+      {/* ── Modal IA ─────────────────────────────────────────────────────── */}
+      {aiStep !== 'idle' && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+
+          {/* Params */}
+          {aiStep === 'params' && (
+            <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, width: '100%', maxWidth: 400 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Sparkles size={18} color="#E8FF00" />
+                  <h2 style={{ fontSize: 16, fontWeight: 900, color: 'var(--text)', margin: 0 }}>Gerar Treino com IA</h2>
+                </div>
+                <button onClick={() => setAiStep('idle')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', padding: 4 }}><X size={20} /></button>
+              </div>
+              <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0 }}>A IA vai analisar a anamnese e a avaliação física mais recente (incluindo fotos) e gerar um treino personalizado para revisão.</p>
+                <div>
+                  <label style={lbl}>Frequência de treino (dias/semana)</label>
+                  <select value={aiTrainingDays} onChange={e => setAiTrainingDays(parseInt(e.target.value))} style={{ ...inp(), colorScheme: 'dark' }}>
+                    {[2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} dias/semana</option>)}
+                  </select>
+                </div>
+                {aiError && <p style={{ color: '#FF4444', fontSize: 13, margin: 0 }}>{aiError}</p>}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => setAiStep('idle')} style={{ flex: 1, padding: '11px 0', border: '1px solid var(--border)', borderRadius: 12, background: 'none', color: 'var(--text-2)', fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
+                  <button onClick={generateWithAI} style={{ flex: 2, padding: '11px 0', backgroundColor: '#E8FF00', border: 'none', borderRadius: 12, color: '#0A0A0A', fontSize: 14, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <Sparkles size={15} /> Gerar Treino
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Loading */}
+          {aiStep === 'loading' && (
+            <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: '40px 48px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+              <div style={{ width: 40, height: 40, border: '3px solid rgba(232,255,0,0.15)', borderTopColor: '#E8FF00', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              <div style={{ textAlign: 'center' }}>
+                <p style={{ color: 'var(--text)', fontWeight: 700, margin: 0 }}>Gerando treino…</p>
+                <p style={{ color: 'var(--text-2)', fontSize: 13, margin: '4px 0 0 0' }}>Analisando perfil e fotos — pode levar 20–40 s</p>
+              </div>
+            </div>
+          )}
+
+          {/* Result */}
+          {aiStep === 'result' && aiResult && (
+            <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, width: '100%', maxWidth: 640, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Sparkles size={18} color="#E8FF00" />
+                  <h2 style={{ fontSize: 16, fontWeight: 900, color: 'var(--text)', margin: 0 }}>Treino Gerado por IA</h2>
+                </div>
+                <button onClick={() => { setAiStep('idle'); setAiResult(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', padding: 4 }}><X size={20} /></button>
+              </div>
+
+              <div style={{ overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16, flex: 1 }}>
+                {aiResult.needs_info && (
+                  <div style={{ backgroundColor: 'rgba(255,165,0,0.08)', border: '1px solid rgba(255,165,0,0.3)', borderRadius: 12, padding: '12px 16px' }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: '#FFA500', margin: '0 0 4px 0' }}>⚠ IA precisa de informação adicional:</p>
+                    <p style={{ fontSize: 13, color: 'var(--text)', margin: 0 }}>{aiResult.needs_info}</p>
+                  </div>
+                )}
+
+                {aiResult.visual_bf_estimate && (
+                  <div style={{ backgroundColor: 'rgba(232,255,0,0.04)', border: '1px solid rgba(232,255,0,0.2)', borderRadius: 12, padding: '14px 16px' }}>
+                    <p style={{ fontSize: 10, fontWeight: 700, color: '#E8FF00', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 6px 0' }}>Estimativa Visual por IA (aproximada)</p>
+                    <p style={{ fontSize: 22, fontWeight: 900, color: 'var(--text)', margin: '0 0 4px 0' }}>~{aiResult.visual_bf_estimate.pct}% gordura corporal</p>
+                    <p style={{ fontSize: 12, color: 'var(--text-2)', margin: '0 0 6px 0' }}>Confiança: {aiResult.visual_bf_estimate.confidence} · {aiResult.visual_bf_estimate.note}</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, fontStyle: 'italic' }}>⚠ Não é medição precisa — margem de erro ±5–10 p.p.</p>
+                  </div>
+                )}
+
+                {aiResult.justification?.length > 0 && (
+                  <div>
+                    <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 8px 0' }}>Raciocínio da IA</p>
+                    {(aiResult.justification as string[]).map((j, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, fontSize: 13, color: 'var(--text)', marginBottom: 4 }}>
+                        <span style={{ color: '#E8FF00', flexShrink: 0 }}>•</span><span>{j}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 8px 0' }}>
+                    Prévia — {aiResult.workout_name} · {aiResult.periodization}
+                  </p>
+                  {(aiResult.days || []).map((day: any, di: number) => (
+                    <div key={di} style={{ backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px', marginBottom: 8 }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', margin: '0 0 8px 0' }}>
+                        Divisão {day.name}{day.weekday_suggestion?.length > 0 ? ` — ${(day.weekday_suggestion as number[]).map(w => WEEKDAYS[w]).join(', ')}` : ''}
+                      </p>
+                      {(day.exercises || []).map((ex: any, ei: number) => {
+                        const found = allExercises.some(e => e.name.toLowerCase() === (ex.name || '').toLowerCase()
+                          || e.name.toLowerCase().includes((ex.name || '').toLowerCase().split(' ')[0]))
+                        return (
+                          <div key={ei} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                            <span style={{ fontSize: 11, color: found ? '#00C853' : '#FF9800', fontWeight: 700, width: 12 }}>{found ? '✓' : '?'}</span>
+                            <span style={{ fontSize: 13, color: 'var(--text)', flex: 1 }}>{ex.name}</span>
+                            <span style={{ fontSize: 11, color: 'var(--text-2)', flexShrink: 0 }}>{ex.sets}×{ex.reps} / {ex.rest_seconds}s</span>
+                          </div>
+                        )
+                      })}
+                      {(day.cardio || []).map((c: any, ci: number) => (
+                        <div key={ci} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                          <span style={{ fontSize: 11, color: '#4FC3F7', width: 12 }}>♦</span>
+                          <span style={{ fontSize: 13, color: '#4FC3F7' }}>{c.modality} · {c.duration_min} min · {c.intensity}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0 0 0' }}>
+                    ✓ encontrado na base · ? não encontrado (será ignorado — adicione manualmente depois)
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, padding: '16px 24px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+                <button onClick={() => { setAiStep('idle'); setAiResult(null) }}
+                  style={{ flex: 1, padding: '12px 0', border: '1px solid var(--border)', borderRadius: 12, background: 'none', color: 'var(--text-2)', fontSize: 14, cursor: 'pointer' }}>
+                  Descartar
+                </button>
+                <button onClick={() => applyAIPlan(aiResult)}
+                  style={{ flex: 2, padding: '12px 0', backgroundColor: '#E8FF00', border: 'none', borderRadius: 12, color: '#0A0A0A', fontSize: 14, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <Save size={15} /> Aplicar ao Builder
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
