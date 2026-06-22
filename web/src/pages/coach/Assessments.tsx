@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Scale, ChevronDown, ChevronLeft, ChevronRight, X, ImageOff, SlidersHorizontal, ClipboardPlus, Camera, Pencil } from 'lucide-react'
+import { Scale, ChevronDown, ChevronLeft, ChevronRight, X, ImageOff, SlidersHorizontal, ClipboardPlus, Camera, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 
@@ -44,6 +44,9 @@ export default function Assessments() {
   const [editPreviews, setEditPreviews] = useState<Record<string, string>>({})
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
+
+  const [deleteConfirm, setDeleteConfirm] = useState<Assessment | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const coachIdRef = useRef<string | null>(null)
   const studentIdsRef = useRef<string[]>([])
@@ -211,6 +214,22 @@ export default function Assessments() {
     if (selected) selectStudent(selected)
   }
 
+  const deleteAssessment = async () => {
+    if (!deleteConfirm || !selected) return
+    setDeleting(true)
+    const a = deleteConfirm
+    const { data: files } = await supabase.storage.from('assessment-photos').list(`assessments/${selected.id}/${a.id}`)
+    if (files && files.length > 0) {
+      const paths = files.map(f => `assessments/${selected.id}/${a.id}/${f.name}`)
+      await supabase.storage.from('assessment-photos').remove(paths)
+    }
+    await supabase.from('assessment_photos').delete().eq('assessment_id', a.id)
+    await supabase.from('assessments').delete().eq('id', a.id)
+    setDeleteConfirm(null)
+    setDeleting(false)
+    setAssessments(prev => prev.filter(x => x.id !== a.id))
+  }
+
   const saveManual = async () => {
     if (!selected || !manualForm.date || !manualForm.weight) { setManualError('Data e peso são obrigatórios.'); return }
     setManualSaving(true)
@@ -308,7 +327,7 @@ export default function Assessments() {
             ) : assessments.map((a, idx) => (
               <AssessmentCard key={a.id} assessment={a} index={assessments.length - idx} prev={assessments[idx + 1]}
                 formatDate={formatDate} imc={imc} onPhotoClick={(photos, i) => setLightbox({ photos, index: i })}
-                onEdit={() => openEdit(a)} />
+                onEdit={() => openEdit(a)} onDelete={() => setDeleteConfirm(a)} />
             ))}
           </div>
         </div>
@@ -471,6 +490,31 @@ export default function Assessments() {
                   {editSaving ? 'Salvando…' : 'Salvar alterações'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: confirmar exclusão */}
+      {deleteConfirm && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 16 }}>
+          <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, width: '100%', maxWidth: 380, padding: 28 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,68,68,0.12)', margin: '0 auto 18px' }}>
+              <Trash2 size={22} color="#FF4444" />
+            </div>
+            <p style={{ fontSize: 16, fontWeight: 900, color: 'var(--text)', margin: '0 0 8px 0', textAlign: 'center' }}>Excluir avaliação?</p>
+            <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 24px 0', textAlign: 'center', lineHeight: 1.5 }}>
+              A avaliação de {formatDate(deleteConfirm.created_at)} será removida permanentemente, incluindo todas as fotos.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setDeleteConfirm(null)} disabled={deleting}
+                style={{ flex: 1, padding: '10px 0', backgroundColor: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--text-2)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                Cancelar
+              </button>
+              <button onClick={deleteAssessment} disabled={deleting}
+                style={{ flex: 1, padding: '10px 0', backgroundColor: deleting ? 'var(--border)' : '#FF4444', color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: deleting ? 'not-allowed' : 'pointer' }}>
+                {deleting ? 'Excluindo…' : 'Excluir'}
+              </button>
             </div>
           </div>
         </div>
@@ -750,11 +794,12 @@ function MetricRow({ label, value, diff }: { label: string; value: string; diff?
 
 // ─── Existing sub-components ────────────────────────────────────
 
-function AssessmentCard({ assessment, index, prev, formatDate, imc, onPhotoClick, onEdit }: {
+function AssessmentCard({ assessment, index, prev, formatDate, imc, onPhotoClick, onEdit, onDelete }: {
   assessment: Assessment; index: number; prev?: Assessment
   formatDate: (s: string) => string; imc: (w: number, h: number) => string
   onPhotoClick: (photos: AssessmentPhoto[], i: number) => void
   onEdit: () => void
+  onDelete: () => void
 }) {
   const [open, setOpen] = useState(index === 1)
   const weightDiff = prev ? assessment.weight - prev.weight : null
@@ -780,6 +825,12 @@ function AssessmentCard({ assessment, index, prev, formatDate, imc, onPhotoClick
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--surface-hover)'; (e.currentTarget as HTMLElement).style.color = 'var(--text)' }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--text-2)' }}>
             <Pencil size={13} />
+          </button>
+          <button onClick={e => { e.stopPropagation(); onDelete() }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 7, border: '1px solid var(--border)', backgroundColor: 'transparent', color: 'var(--text-2)', cursor: 'pointer' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(255,68,68,0.1)'; (e.currentTarget as HTMLElement).style.color = '#FF4444'; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,68,68,0.3)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)' }}>
+            <Trash2 size={13} />
           </button>
           <ChevronDown size={16} color="#888" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
         </div>
