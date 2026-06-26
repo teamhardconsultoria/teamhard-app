@@ -39,11 +39,12 @@ teamhard-app/
 ### Backend
 - **Supabase** — auth, banco PostgreSQL, storage, edge functions
 - **Deno** — runtime das edge functions
+- **Anthropic Claude API** — geração de treinos e dietas com IA (modelo `claude-sonnet-4-6`, multimodal com fotos de avaliação)
 - **Resend** — envio de e-mails transacionais
 - **Z-API** — mensagens WhatsApp
-- **ASAAS** — gateway de pagamentos (boleto, cartão, PIX)
+- **Eduzz** — gateway de pagamentos principal (boleto, cartão, PIX)
+- **ASAAS** — gateway de pagamentos legado (mantido para histórico; novos alunos usam Eduzz)
 - **Autentique** — assinatura eletrônica de contratos
-- **Eduzz** — plataforma alternativa de pagamentos (alunos legado)
 
 ### Deploy
 - **Vercel** — deploy automático ao push em `main`
@@ -81,7 +82,7 @@ Vinculada a `auth.users`. Campos: `id`, `email`, `name`, `phone`, `role`, `avata
 Link de convite para o aluno se auto-cadastrar. `token` (UUID único), `coach_id`, `email` (opcional, pré-preenchido), `expires_at` (7 dias), `used_at`, `student_id` (preenchido após uso).
 
 ### `anamnese`
-Questionário de onboarding do aluno (preenchido no primeiro login). Campos: dados pessoais, objetivos, saúde, alimentação, estilo de vida. Campo `completed` bloqueado após preenchimento.
+Questionário de onboarding do aluno (preenchido no primeiro login). Campos: dados pessoais, objetivos, saúde, alimentação, estilo de vida. Campo `completed` bloqueado após preenchimento. Inclui campos de fitness avançados (`fitness_level`, `gym_experience`, `has_good_technique`, `load_progressing`) usados pela IA.
 
 ### `workouts` / `workout_days` / `workout_exercises`
 Estrutura hierárquica de treinos. Suporte a periodização (`workout_periodization`), exercícios de cardio (`workout_cardio`).
@@ -92,11 +93,15 @@ Estrutura hierárquica de dietas. Macros calculados (proteína, carbo, gordura, 
 ### `food_library`
 Biblioteca global de alimentos (tabela TACO + custom). `source`: `'taco'|'custom'`. Usada para montagem de dietas e substituições.
 
-### `assessments`
-Avaliações físicas periódicas (peso, medidas, fotos).
+### `assessments` / `assessment_photos`
+Avaliações físicas periódicas (peso, medidas, fotos de 4 ângulos: frente, costas, esquerda, direita). Coach pode adicionar, editar e excluir avaliações. Fotos usadas pela IA na geração de planos.
 
 ### `payments`
 Parcelas de pagamento. `status`: `pending|overdue|paid`. `source`: `manual|scheduled|asaas|eduzz`.
+
+**Cron `mark-overdue-scheduled-payments`** (5h11 UTC, diário): marca parcelas `scheduled` vencidas como `overdue` e atualiza `payment_status` do aluno para `overdue`. Importante: o cron apenas move `active → overdue`; a reversão para `active` ocorre via UI quando o coach quita a parcela.
+
+**Bug conhecido corrigido (migration 051)**: ao registrar pagamento manual (`handleRegister`), o código agora também marca como `paid` quaisquer parcelas agendadas vencidas do mesmo aluno, impedindo que o cron as reative no dia seguinte.
 
 ### `leads`
 CRM Kanban de prospects. `status`: `new|contacted|interested|converted|lost`. Campo `converted_student_id` após conversão.
@@ -137,10 +142,11 @@ Fila de mensagens automáticas (WhatsApp/e-mail). Processada por cron.
 | `send-reminders` | Envia lembretes automáticos (cron). |
 | `send-welcome-message` | Mensagem de boas-vindas via WhatsApp. |
 | `rest-timer-notify` | Notificação de fim de descanso entre séries. |
-| `asaas-create-charge` | Cria cobrança avulsa no ASAAS. |
-| `asaas-create-subscription` | Cria assinatura recorrente no ASAAS. |
-| `asaas-webhook` | Recebe eventos de pagamento do ASAAS. |
-| `eduzz-webhook` | Recebe eventos de pagamento da Eduzz. |
+| `generate-ai-plan` | Gera treino ou dieta personalizado com Claude AI. Lê anamnese + avaliação mais recente (incluindo fotos via visão computacional). Parâmetros: `student_id`, `type` (`workout`\|`diet`), `training_days` (treino), `goal_mode` (`emagrecer`\|`ganhar_massa`\|`recomposicao`) (dieta), `activity_factor_override`. Requer secret `ANTHROPIC_API_KEY`. |
+| `asaas-create-charge` | Cria cobrança avulsa no ASAAS (legado). |
+| `asaas-create-subscription` | Cria assinatura recorrente no ASAAS (legado). |
+| `asaas-webhook` | Recebe eventos de pagamento do ASAAS (legado). |
+| `eduzz-webhook` | Recebe eventos de pagamento da Eduzz. Suporta múltiplos formatos de payload (MyEduzz + formato legado). |
 
 ---
 
@@ -166,11 +172,11 @@ Fila de mensagens automáticas (WhatsApp/e-mail). Processada por cron.
 017 — Bucket de avatares
 018 — Cascade ao deletar coach
 019 — Treino cardio
-020 — Cronograma de pagamentos (generate_payment_schedule)
+020 — Cronograma de pagamentos (generate_payment_schedule + cron mark-overdue)
 021 — Fix cronograma
 022 — Correção de pagamento manual
 023 — Aluno June Mazotini (seed)
-024 — Override de parcelas no cronograma
+024 — Override de parcelas no cronograma (p_total_installments)
 025 — Drop função de cronograma antiga
 026 — Diet log finalizado
 027 — Plano permuta
@@ -194,7 +200,33 @@ Fila de mensagens automáticas (WhatsApp/e-mail). Processada por cron.
 047 — Biblioteca global de alimentos (food_library)
 048 — Seed TACO na food_library
 049 — Tabela student_invites; plan_type e plan_end nullable
+050 — p_first_paid em generate_payment_schedule (1ª parcela já paga)
+051 — Fix parcelas scheduled overdue após pagamento manual
 ```
+
+---
+
+## Geração de Planos com IA
+
+O botão **"Gerar com IA"** está disponível no WorkoutBuilder e no DietBuilder. Ao clicar, o coach pode configurar parâmetros (dias de treino, objetivo, fator de atividade) e a edge function `generate-ai-plan` é chamada.
+
+### Fluxo
+1. Lê anamnese completa do aluno (obrigatória — bloqueia se não preenchida)
+2. Busca avaliação mais recente + fotos corporais (frente, costas, esquerda, direita)
+3. Calcula TMB (Mifflin-St Jeor) e GET com base no peso atual
+4. Envia contexto + fotos (base64, visão multimodal) para `claude-sonnet-4-6`
+5. Retorna JSON estruturado que é pré-preenchido no builder para o coach revisar/editar antes de salvar
+
+### Treino (`type: 'workout'`)
+- Consulta lista de exercícios da tabela `exercises` e instrui a IA a usar apenas nomes exatos
+- Considera frequência semanal, periodização, faixa etária, lesões e limitações
+- Retorna: nome, periodização, dias com exercícios (séries/reps/descanso) e cardio
+
+### Dieta (`type: 'diet'`)
+- Considera restrições alimentares, alergias e preferência de número de refeições
+- Calcula meta calórica e macros (proteína, gordura, carboidrato) com base no objetivo
+- Retorna: 1–2 variações de dia (treino/descanso), refeições com alimentos e macros, hidratação, suplementação e substituições
+- **Não substitui prescrição de nutricionista** para condições clínicas (aviso embutido no prompt)
 
 ---
 
@@ -214,6 +246,7 @@ Fila de mensagens automáticas (WhatsApp/e-mail). Processada por cron.
 4. Aluno abre o link → preenche nome, e-mail, senha, telefone
 5. Conta criada sem plano (`plan_type = null`) → coach define o plano depois
 6. Aluno faz login → fluxo de anamnese normal
+7. `super_admin` pode gerar convite por qualquer coach usando o seletor no modal
 
 ### Primeiro login do aluno
 - `first_login: true` no perfil → forçado para `/student/anamnese`
@@ -225,6 +258,12 @@ Fila de mensagens automáticas (WhatsApp/e-mail). Processada por cron.
 2. Ação "Converter em Aluno" → modal com dados de plano/pagamento
 3. Chama a mesma edge function `create-student`
 4. Lead marcado como `converted` com link para o aluno criado
+
+### Registro de pagamento manual
+1. Coach abre histórico do aluno → clica "Novo" ou "Manual"
+2. Informa valor, método, data de vencimento e data de pagamento
+3. `handleRegister` insere nova entrada `manual/paid`, **marca como `paid` quaisquer parcelas `scheduled/overdue`** do aluno (evita que o cron diário reverta o status) e atualiza `payment_status = 'active'`
+4. Cronograma do novo período é gerado automaticamente via `generate_payment_schedule`
 
 ---
 
@@ -240,12 +279,13 @@ VITE_SUPABASE_ANON_KEY=...
 ```
 SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
+ANTHROPIC_API_KEY         # Geração de treinos/dietas com IA (Claude)
 RESEND_API_KEY            # E-mails transacionais
 ZAPI_INSTANCE_ID          # WhatsApp via Z-API
 ZAPI_TOKEN
 ZAPI_CLIENT_TOKEN
-ASAAS_API_KEY
-ASAAS_ENV                 # sandbox | production
+ASAAS_API_KEY             # Legado
+ASAAS_ENV                 # sandbox | production (legado)
 AUTENTIQUE_TOKEN          # Assinatura eletrônica
 EDUZZ_WEBHOOK_SECRET
 VAPID_PUBLIC_KEY          # Push notifications

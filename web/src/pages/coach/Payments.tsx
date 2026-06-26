@@ -140,6 +140,8 @@ export default function Payments() {
       // plan_start do novo período = vencimento do período anterior
       const newPlanStart = modalStudent.plan_end
       await supabase.from('payments').insert({ student_id:modalStudent.id, amount:parseFloat(form.amount), status:'paid', payment_method:form.payment_method, due_date:form.due_date, paid_at:form.paid_at, plan_type:modalStudent.plan_type })
+      // Limpa parcelas agendadas vencidas para o cron não reverter o status para overdue
+      await supabase.from('payments').update({ status:'paid', paid_at:new Date().toISOString() }).eq('student_id', modalStudent.id).eq('source', 'scheduled').eq('status', 'overdue')
       await supabase.from('students').update({ payment_status:'active', plan_end:newPlanEnd, plan_start:newPlanStart }).eq('id', modalStudent.id)
       // Gera cronograma do novo período (a partir do novo plan_start)
       await supabase.rpc('generate_payment_schedule', {
@@ -175,6 +177,20 @@ export default function Payments() {
     setMarkingPaidId(payment.id)
     await supabase.from('payments').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', payment.id)
     setHistory(prev => prev.map(p => p.id === payment.id ? { ...p, status: 'paid', paid_at: new Date().toISOString() } : p))
+
+    if (historyStudent) {
+      const { count } = await supabase
+        .from('payments')
+        .select('id', { count: 'exact', head: true })
+        .eq('student_id', historyStudent.id)
+        .eq('source', 'scheduled')
+        .eq('status', 'overdue')
+      if ((count ?? 0) === 0) {
+        await supabase.from('students').update({ payment_status: 'active' }).eq('id', historyStudent.id)
+        await loadStudents(coachId)
+      }
+    }
+
     if (activeTab === 'agenda') await loadAgenda()
     setMarkingPaidId(null)
   }
@@ -565,6 +581,11 @@ function StudentCard({ student, onHistory, onEduzz, onManual, onUnblock, isHisto
           <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 20, backgroundColor: 'rgba(100,160,255,0.12)', color: '#64A0FF' }}>Permuta</span>
         ) : student.payment_status === 'blocked' ? (
           <TextBtn onClick={onUnblock} primary><ShieldCheck size={12} /> Reativar</TextBtn>
+        ) : student.payment_status === 'overdue' ? (
+          <>
+            <TextBtn onClick={onUnblock} primary><ShieldCheck size={12} /> Reativar</TextBtn>
+            <TextBtn onClick={onManual}><Plus size={12} /> Manual</TextBtn>
+          </>
         ) : (
           <>
             <TextBtn onClick={onEduzz} primary><Link size={12} /> Link</TextBtn>

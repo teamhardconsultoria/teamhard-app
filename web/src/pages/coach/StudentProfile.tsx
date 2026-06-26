@@ -149,7 +149,7 @@ export default function StudentProfile() {
 
     const { error: studentErr } = await supabase.from('students').update({
       plan_type: editForm.plan_type,
-      payment_status: editForm.payment_status,
+      payment_status: editForm.plan_type === 'permuta' ? 'active' : editForm.payment_status,
       plan_end: editForm.plan_end,
     }).eq('id', student.id)
     if (studentErr) { setEditError(studentErr.message); setEditSaving(false); return }

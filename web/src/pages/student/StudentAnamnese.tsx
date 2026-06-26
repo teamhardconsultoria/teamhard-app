@@ -170,6 +170,7 @@ export default function StudentAnamnese() {
     }
     const { error: upsertErr } = await supabase.from('anamnese').upsert(payload, { onConflict: 'student_id' })
     if (upsertErr) { setError(upsertErr.message); setSaving(false); return }
+    await supabase.from('users').update({ anamnese_completed: true, first_login: false }).eq('id', user!.id)
     setSaved(true); setSaving(false)
   }
 

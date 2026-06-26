@@ -71,6 +71,7 @@ export default function Students() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [cards, setCards] = useState<StudentCards | null>(null)
+  const [sort, setSort] = useState<'default' | 'az' | 'za'>('default')
 
   // Create modal
   const [showModal, setShowModal] = useState(false)
@@ -403,6 +404,20 @@ export default function Students() {
           />
         </div>
 
+        {/* Ordenação */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+          {(['default', 'az', 'za'] as const).map(opt => {
+            const label = opt === 'default' ? 'Recentes' : opt === 'az' ? 'A→Z' : 'Z→A'
+            const active = sort === opt
+            return (
+              <button key={opt} onClick={() => setSort(opt)}
+                style={{ padding: '4px 12px', borderRadius: 8, border: active ? '1px solid #E8FF00' : '1px solid var(--border)', backgroundColor: active ? 'rgba(232,255,0,0.1)' : 'transparent', color: active ? '#E8FF00' : 'var(--text-2)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                {label}
+              </button>
+            )
+          })}
+        </div>
+
         {/* Lista */}
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 80 }}>
@@ -414,7 +429,11 @@ export default function Students() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {filtered.map(student => (
+            {[...filtered].sort((a, b) => {
+              if (sort === 'az') return a.user.name.localeCompare(b.user.name, 'pt-BR')
+              if (sort === 'za') return b.user.name.localeCompare(a.user.name, 'pt-BR')
+              return 0
+            }).map(student => (
               <StudentCard
                 key={student.id}
                 student={student}

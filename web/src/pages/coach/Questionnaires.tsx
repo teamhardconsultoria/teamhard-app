@@ -51,6 +51,7 @@ export default function Questionnaires() {
   const [anamneseList, setAnamneseList] = useState<AnamneseRecord[]>([])
   const [loadingAnamnese, setLoadingAnamnese] = useState(false)
   const [expandedAnamnese, setExpandedAnamnese] = useState<Record<string, boolean>>({})
+  const [anamneseSort, setAnamneseSort] = useState<'az' | 'za' | 'recent'>('az')
 
   useEffect(() => { init() }, [])
 
@@ -169,21 +170,47 @@ export default function Questionnaires() {
       {showAnamnese ? (
         <div style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0, overflow:'hidden' }}>
           <div style={{ padding:'14px 20px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-            <p style={{ fontSize:14, fontWeight:700, color:'#fff', margin:0 }}>Anamnese dos Alunos</p>
-            <p style={{ fontSize:12, color:'#888', margin:0 }}>
-              {anamneseList.filter(a => a.completed).length} preenchida{anamneseList.filter(a => a.completed).length !== 1 ? 's' : ''} · {anamneseList.filter(a => !a.data).length} pendente{anamneseList.filter(a => !a.data).length !== 1 ? 's' : ''}
-            </p>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+              <div>
+                <p style={{ fontSize:14, fontWeight:700, color:'#fff', margin:0 }}>Anamnese dos Alunos</p>
+                <p style={{ fontSize:12, color:'#888', margin:0 }}>
+                  {anamneseList.filter(a => a.completed).length} preenchida{anamneseList.filter(a => a.completed).length !== 1 ? 's' : ''} · {anamneseList.filter(a => !a.data).length} pendente{anamneseList.filter(a => !a.data).length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <div style={{ display:'flex', gap:4, flexShrink:0 }}>
+                {(['az','za','recent'] as const).map(opt => {
+                  const label = opt === 'az' ? 'A→Z' : opt === 'za' ? 'Z→A' : 'Recentes'
+                  const active = anamneseSort === opt
+                  return (
+                    <button key={opt} onClick={() => setAnamneseSort(opt)}
+                      style={{ padding:'4px 10px', borderRadius:8, border: active ? '1px solid #E8FF00' : '1px solid var(--border)', backgroundColor: active ? 'rgba(232,255,0,0.1)' : 'transparent', color: active ? '#E8FF00' : '#888', fontSize:11, fontWeight:600, cursor:'pointer' }}>
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           </div>
           <div style={{ flex:1, overflowY:'auto', padding:24 }}>
             {loadingAnamnese ? (
               <div style={{ display:'flex', justifyContent:'center', paddingTop:40 }}><div style={spin} /></div>
             ) : (
               <div style={{ display:'flex', flexDirection:'column', gap:10, maxWidth:720 }}>
-                {anamneseList.map(a => (
+                {[...anamneseList].sort((a, b) => {
+                  if (anamneseSort === 'az') return a.studentName.localeCompare(b.studentName, 'pt-BR')
+                  if (anamneseSort === 'za') return b.studentName.localeCompare(a.studentName, 'pt-BR')
+                  // recent: by created_at desc, nulls last
+                  const da = a.data?.created_at ? new Date(a.data.created_at).getTime() : 0
+                  const db = b.data?.created_at ? new Date(b.data.created_at).getTime() : 0
+                  return db - da
+                }).map(a => (
                   <AnamneseCard key={a.studentId} record={a}
                     expanded={!!expandedAnamnese[a.studentId]}
                     onToggle={() => setExpandedAnamnese(p => ({ ...p, [a.studentId]: !p[a.studentId] }))}
-                    onSend={() => navigate(`/coach/chat/${a.studentId}`)} />
+                    onSend={async () => {
+                      if (coachId) await sendAutoMessage({ coachUserId: user!.id, coachId, studentId: a.studentId, type: 'anamnese_reminder', studentName: a.studentName })
+                      navigate(`/coach/chat/${a.studentId}`)
+                    }} />
                 ))}
               </div>
             )}
@@ -356,7 +383,7 @@ function AnamneseCard({ record, expanded, onToggle, onSend }: { record: Anamnese
             style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 10px', backgroundColor:'rgba(232,255,0,0.1)', border:'1px solid rgba(232,255,0,0.3)', borderRadius:7, color:'#E8FF00', fontSize:11, fontWeight:700, cursor:'pointer', flexShrink:0 }}
             onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(232,255,0,0.18)')}
             onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(232,255,0,0.1)')}>
-            <Send size={11} /> Enviar
+            <Send size={11} /> Lembrar
           </button>
         ) : record.completed ? (
           <span style={{ fontSize:10, fontWeight:700, backgroundColor:'rgba(0,200,83,0.1)', color:'#00C853', padding:'2px 8px', borderRadius:20, flexShrink:0 }}>Completa</span>

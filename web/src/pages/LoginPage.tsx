@@ -12,7 +12,7 @@ export default function LoginPage() {
 
   if (user) {
     if (user.role === 'student') {
-      navigate('/student/home', { replace: true })
+      navigate(user.first_login ? '/student/anamnese' : '/student/home', { replace: true })
       return null
     }
     navigate(user.role === 'super_admin' ? '/admin' : '/coach', { replace: true })
