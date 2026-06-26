@@ -84,7 +84,7 @@ export default function Questionnaires() {
     setShowAnamnese(true); setSelected(null); setExpandedAnamnese({})
     setLoadingAnamnese(true)
     const { data } = await supabase.from('students').select(`
-      id, user_id, user:users(name),
+      id, user:users(id, name),
       anamnese(full_name, birth_date, biological_sex, city, profession,
         goal, current_weight, height, desired_weight, goal_months,
         has_disease, disease_description, uses_medication, medication_description,
@@ -96,7 +96,7 @@ export default function Questionnaires() {
     `).eq('coach_id', cId)
     setAnamneseList((data || []).map((s: any) => ({
       studentId: s.id,
-      studentUserId: s.user_id,
+      studentUserId: (s.user as any)?.id,
       studentName: (s.user as any)?.name || '?',
       completed: !!(s.anamnese as any)?.completed,
       data: (s.anamnese as any) || null,
