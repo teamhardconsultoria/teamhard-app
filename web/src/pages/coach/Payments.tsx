@@ -187,7 +187,7 @@ export default function Payments() {
         .eq('status', 'overdue')
       if ((count ?? 0) === 0) {
         await supabase.from('students').update({ payment_status: 'active' }).eq('id', historyStudent.id)
-        await loadStudents(coachId)
+        if (coachId) await loadStudents(coachId)
       }
     }
 
