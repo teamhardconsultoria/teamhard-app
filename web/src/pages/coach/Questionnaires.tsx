@@ -382,17 +382,15 @@ function AnamneseCard({ record, expanded, onToggle, onSend }: { record: Anamnese
             {!a ? 'Não preenchida' : `${GOAL_LBL[a.goal] || a.goal}${age ? ` · ${age} anos` : ''}${a.fitness_level ? ` · ${FITNESS_LBL[a.fitness_level] || a.fitness_level}` : ''}`}
           </p>
         </div>
-        {!a ? (
+        {record.completed ? (
+          <span style={{ fontSize:10, fontWeight:700, backgroundColor:'rgba(0,200,83,0.1)', color:'#00C853', padding:'2px 8px', borderRadius:20, flexShrink:0 }}>Completa</span>
+        ) : (
           <button onClick={onSend}
             style={{ display:'flex', alignItems:'center', gap:5, padding:'4px 10px', backgroundColor:'rgba(232,255,0,0.1)', border:'1px solid rgba(232,255,0,0.3)', borderRadius:7, color:'#E8FF00', fontSize:11, fontWeight:700, cursor:'pointer', flexShrink:0 }}
             onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(232,255,0,0.18)')}
             onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(232,255,0,0.1)')}>
             <Send size={11} /> Lembrar
           </button>
-        ) : record.completed ? (
-          <span style={{ fontSize:10, fontWeight:700, backgroundColor:'rgba(0,200,83,0.1)', color:'#00C853', padding:'2px 8px', borderRadius:20, flexShrink:0 }}>Completa</span>
-        ) : (
-          <span style={{ fontSize:10, fontWeight:700, backgroundColor:'rgba(255,152,0,0.1)', color:'#FF9800', padding:'2px 8px', borderRadius:20, flexShrink:0 }}>Parcial</span>
         )}
         <div onClick={onToggle} style={{ cursor:'pointer', flexShrink:0 }}>
           {expanded ? <ChevronUp size={14} color="#888" /> : <ChevronDown size={14} color="#888" />}
