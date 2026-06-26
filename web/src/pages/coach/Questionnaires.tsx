@@ -13,7 +13,7 @@ interface PendingStudent { id: string; name: string }
 interface Student { id: string; name: string }
 
 interface AnamneseRecord {
-  studentId: string; studentName: string; completed: boolean
+  studentId: string; studentName: string; studentUserId: string; completed: boolean
   data: Record<string, any> | null
 }
 
@@ -84,7 +84,7 @@ export default function Questionnaires() {
     setShowAnamnese(true); setSelected(null); setExpandedAnamnese({})
     setLoadingAnamnese(true)
     const { data } = await supabase.from('students').select(`
-      id, user:users(name),
+      id, user_id, user:users(name),
       anamnese(full_name, birth_date, biological_sex, city, profession,
         goal, current_weight, height, desired_weight, goal_months,
         has_disease, disease_description, uses_medication, medication_description,
@@ -96,6 +96,7 @@ export default function Questionnaires() {
     `).eq('coach_id', cId)
     setAnamneseList((data || []).map((s: any) => ({
       studentId: s.id,
+      studentUserId: s.user_id,
       studentName: (s.user as any)?.name || '?',
       completed: !!(s.anamnese as any)?.completed,
       data: (s.anamnese as any) || null,
@@ -208,7 +209,10 @@ export default function Questionnaires() {
                     expanded={!!expandedAnamnese[a.studentId]}
                     onToggle={() => setExpandedAnamnese(p => ({ ...p, [a.studentId]: !p[a.studentId] }))}
                     onSend={async () => {
-                      if (coachId) await sendAutoMessage({ coachUserId: user!.id, coachId, studentId: a.studentId, type: 'anamnese_reminder', studentName: a.studentName })
+                      const firstName = a.studentName.split(' ')[0]
+                      const content = `Olá, ${firstName}! 📝 Lembre-se de preencher sua anamnese no app. Acesse o menu "Anamnese" para completar suas informações de saúde.`
+                      await supabase.from('messages').insert({ sender_id: user!.id, receiver_id: a.studentUserId, content, type: 'text' })
+                      supabase.functions.invoke('send-push-notification', { body: { user_id: a.studentUserId, title: user?.name || 'Coach', body: content.slice(0, 80) + '…', data: { screen: '/(student)/chat' }, channel_id: 'messages' } })
                       navigate(`/coach/chat/${a.studentId}`)
                     }} />
                 ))}
