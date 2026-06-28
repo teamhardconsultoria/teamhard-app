@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Dumbbell, Salad, ClipboardList, MessageSquare, User, Scale, Activity, List, TrendingUp, History, KeyRound, Copy, Check, CalendarClock, X, ShieldOff, ShieldCheck, Pencil, EyeOff } from 'lucide-react'
+import { ArrowLeft, Dumbbell, Salad, ClipboardList, MessageSquare, User, Scale, Activity, List, TrendingUp, History, KeyRound, Copy, Check, CalendarClock, X, ShieldOff, ShieldCheck, Pencil, EyeOff, FileText } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
 import { useIsMobile } from '../../hooks/useIsMobile'
@@ -281,7 +281,8 @@ export default function StudentProfile() {
           <ActionCard icon={<MessageSquare size={20} color="#E8FF00" />} title="Chat" description="Enviar mensagem ao aluno" to={`/coach/chat/${id}`} navigate={navigate} />
           <ActionCard icon={<TrendingUp size={20} color="#E8FF00" />} title="Evolução" description="Gráficos de peso e frequência" to={`/coach/students/${id}/evolution`} navigate={navigate} />
           <ActionCard icon={<History size={20} color="#E8FF00" />} title="Histórico de Treinos" description="Sessões com cargas e reps" to={`/coach/students/${id}/sessions`} navigate={navigate} />
-          <ActionCard icon={<ClipboardList size={20} color="#E8FF00" />} title="Avaliações" description="Fotos e histórico de medidas" to="/coach/assessments" navigate={navigate} />
+          <ActionCard icon={<ClipboardList size={20} color="#E8FF00" />} title="Avaliações" description="Fotos e histórico de medidas" to="/coach/assessments" state={{ autoSelectStudentId: id }} navigate={navigate} />
+          <ActionCard icon={<FileText size={20} color="#E8FF00" />} title="Questionários" description="Anamnese e respostas do aluno" to="/coach/questionnaires" state={{ autoSelectStudentId: id }} navigate={navigate} />
         </div>
 
         {/* Agendar avaliação */}
@@ -508,10 +509,10 @@ function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string
   )
 }
 
-function ActionCard({ icon, title, description, to, navigate }: { icon: React.ReactNode; title: string; description: string; to: string; navigate: (to: string) => void }) {
+function ActionCard({ icon, title, description, to, navigate, state }: { icon: React.ReactNode; title: string; description: string; to: string; navigate: (to: string, opts?: any) => void; state?: any }) {
   const [hovered, setHovered] = useState(false)
   return (
-    <div onClick={() => navigate(to)}
+    <div onClick={() => navigate(to, state ? { state } : undefined)}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{ backgroundColor: hovered ? '#161616' : 'var(--surface)', border: `1px solid ${hovered ? 'rgba(232,255,0,0.3)' : '#1E1E1E'}`, borderRadius: 14, padding: 16, display: 'flex', alignItems: 'flex-start', gap: 14, cursor: 'pointer', transition: 'all 0.15s' }}>

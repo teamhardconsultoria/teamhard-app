@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, X, Trash2, Send, FileText, ChevronDown, ChevronUp, Check, ClipboardList, AlertCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
@@ -35,6 +35,7 @@ const labelStyle = { fontSize:11, color:'#888', textTransform:'uppercase' as con
 export default function Questionnaires() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
+  const location = useLocation()
   const [coachId, setCoachId] = useState<string | null>(null)
   const [questionnaires, setQuestionnaires] = useState<Questionnaire[]>([])
   const [selected, setSelected] = useState<Questionnaire | null>(null)
@@ -61,6 +62,12 @@ export default function Questionnaires() {
     setCoachId(coach.id)
     await Promise.all([loadQuestionnaires(coach.id), loadStudents(coach.id)])
     setLoading(false)
+
+    const autoId = (location.state as any)?.autoSelectStudentId
+    if (autoId) {
+      await handleSelectAnamnese(coach.id)
+      setExpandedAnamnese({ [autoId]: true })
+    }
   }
 
   const loadQuestionnaires = async (cId: string) => {

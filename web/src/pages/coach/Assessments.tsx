@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Scale, ChevronDown, ChevronLeft, ChevronRight, X, ImageOff, SlidersHorizontal, ClipboardPlus, Camera, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/auth'
@@ -23,6 +24,7 @@ const PHOTO_ANGLES: { key: PhotoAngle; label: string }[] = [
 
 export default function Assessments() {
   const { user } = useAuthStore()
+  const location = useLocation()
   const [coachId, setCoachId] = useState<string | null>(null)
   const [students, setStudents] = useState<Student[]>([])
   const [selected, setSelected] = useState<Student | null>(null)
@@ -52,27 +54,19 @@ export default function Assessments() {
   const studentIdsRef = useRef<string[]>([])
   const subRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
-  const LS_KEY = (studentId: string) => `assess_last_seen_${studentId}`
-
   const refreshUnread = async () => {
     const ids = studentIdsRef.current
     const cId = coachIdRef.current
     if (!ids.length || !cId) return
-    const minTs = ids.reduce((min, id) => {
-      const ts = localStorage.getItem(LS_KEY(id)) || new Date(0).toISOString()
-      return ts < min ? ts : min
-    }, new Date().toISOString())
     const { data } = await supabase
       .from('assessments')
-      .select('student_id, created_at')
+      .select('student_id')
       .eq('coach_id', cId)
-      .gt('created_at', minTs)
+      .eq('read_by_coach', false)
       .in('student_id', ids)
-    const now = new Date().toISOString()
     const hasNew: Record<string, boolean> = {}
     for (const a of data || []) {
-      const lastSeen = localStorage.getItem(LS_KEY(a.student_id)) || new Date(0).toISOString()
-      if (a.created_at > lastSeen) hasNew[a.student_id] = true
+      hasNew[a.student_id] = true
     }
     setStudents(prev => prev.map(s => ({ ...s, hasUnread: !!hasNew[s.id] })))
   }
@@ -102,6 +96,12 @@ export default function Assessments() {
     setLoadingStudents(false)
     await refreshUnread()
 
+    const autoId = (location.state as any)?.autoSelectStudentId
+    if (autoId) {
+      const target = studentList.find(s => s.id === autoId)
+      if (target) await selectStudent(target)
+    }
+
     if (subRef.current) supabase.removeChannel(subRef.current)
     subRef.current = supabase
       .channel(`assessments-coach-${coach.id}`)
@@ -120,13 +120,6 @@ export default function Assessments() {
     }))
     setAssessments(withPhotos)
     setLoadingAssessments(false)
-    // Grava o created_at da avaliação mais recente + 1s como "visto"
-    const newestAt = data?.[0]?.created_at
-    const seenTs = newestAt
-      ? new Date(new Date(newestAt).getTime() + 1000).toISOString()
-      : new Date().toISOString()
-    localStorage.setItem(LS_KEY(student.id), seenTs)
-    localStorage.setItem('coach_assessments_last_seen', new Date().toISOString())
     setStudents(prev => prev.map(s => s.id === student.id ? { ...s, hasUnread: false } : s))
     window.dispatchEvent(new Event('assessment_student_viewed'))
     if (data && data.some((a: any) => !a.read_by_coach)) {
