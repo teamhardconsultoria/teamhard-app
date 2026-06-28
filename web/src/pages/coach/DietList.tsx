@@ -22,6 +22,7 @@ export default function DietList() {
   const { id: studentId } = useParams()
   const navigate = useNavigate()
   const [studentName, setStudentName] = useState('')
+  const [dietEnabled, setDietEnabled] = useState(true)
   const [diets, setDiets] = useState<Diet[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
@@ -30,8 +31,11 @@ export default function DietList() {
   useEffect(() => { fetchData() }, [studentId])
 
   const fetchData = async () => {
-    const { data: student } = await supabase.from('students').select('user:users(name)').eq('id', studentId).single()
-    if (student) setStudentName((student.user as any).name)
+    const { data: student } = await supabase.from('students').select('diet_enabled, user:users(name)').eq('id', studentId).single()
+    if (student) {
+      setStudentName((student.user as any).name)
+      setDietEnabled((student as any).diet_enabled ?? true)
+    }
 
     const { data: dList } = await supabase.from('diets').select('id, name, valid_from, valid_to, active, created_at').eq('student_id', studentId).order('created_at', { ascending: false })
     if (!dList) { setLoading(false); return }
@@ -73,18 +77,27 @@ export default function DietList() {
           <ArrowLeft size={15} /> Voltar para {studentName || 'Aluno'}
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: dietEnabled ? 28 : 16 }}>
           <div>
             <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0 }}>Dietas de</p>
             <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--text)', margin: '4px 0 0 0' }}>{studentName || '...'}</h1>
           </div>
-          <button onClick={() => navigate(`/coach/students/${studentId}/diet/new`)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, backgroundColor: '#E8FF00', color: '#0A0A0A', fontWeight: 700, padding: '10px 16px', borderRadius: 10, fontSize: 14, border: 'none', cursor: 'pointer' }}
-            onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#d4e800')}
-            onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#E8FF00')}>
+          <button onClick={() => dietEnabled && navigate(`/coach/students/${studentId}/diet/new`)}
+            disabled={!dietEnabled}
+            title={!dietEnabled ? 'Dieta desativada para este aluno' : undefined}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, backgroundColor: dietEnabled ? '#E8FF00' : 'var(--border)', color: dietEnabled ? '#0A0A0A' : 'var(--text-2)', fontWeight: 700, padding: '10px 16px', borderRadius: 10, fontSize: 14, border: 'none', cursor: dietEnabled ? 'pointer' : 'not-allowed', opacity: dietEnabled ? 1 : 0.6 }}
+            onMouseEnter={e => { if (dietEnabled) e.currentTarget.style.backgroundColor = '#d4e800' }}
+            onMouseLeave={e => { if (dietEnabled) e.currentTarget.style.backgroundColor = '#E8FF00' }}>
             <Plus size={16} /> Nova Dieta
           </button>
         </div>
+
+        {!dietEnabled && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,152,0,0.08)', border: '1px solid rgba(255,152,0,0.25)', borderRadius: 10, padding: '10px 14px', marginBottom: 24 }}>
+            <Salad size={15} color="#FF9800" style={{ flexShrink: 0 }} />
+            <p style={{ fontSize: 13, color: '#FF9800', margin: 0 }}>A área de dieta está <strong>desativada</strong> para este aluno. Reative no perfil para criar novas dietas.</p>
+          </div>
+        )}
 
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 80 }}><div style={spin} /></div>
@@ -95,8 +108,10 @@ export default function DietList() {
             </div>
             <p style={{ color: 'var(--text)', fontWeight: 600, fontSize: 14, margin: 0 }}>Nenhuma dieta criada</p>
             <p style={{ color: 'var(--text-2)', fontSize: 13, margin: '6px 0 20px' }}>Crie a primeira dieta para este aluno.</p>
-            <button onClick={() => navigate(`/coach/students/${studentId}/diet/new`)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, backgroundColor: '#E8FF00', color: '#0A0A0A', fontWeight: 700, padding: '10px 16px', borderRadius: 10, fontSize: 14, border: 'none', cursor: 'pointer' }}>
+            <button onClick={() => dietEnabled && navigate(`/coach/students/${studentId}/diet/new`)}
+              disabled={!dietEnabled}
+              title={!dietEnabled ? 'Dieta desativada para este aluno' : undefined}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, backgroundColor: dietEnabled ? '#E8FF00' : 'var(--border)', color: dietEnabled ? '#0A0A0A' : 'var(--text-2)', fontWeight: 700, padding: '10px 16px', borderRadius: 10, fontSize: 14, border: 'none', cursor: dietEnabled ? 'pointer' : 'not-allowed', opacity: dietEnabled ? 1 : 0.6 }}>
               <Plus size={16} /> Criar Dieta
             </button>
           </div>

@@ -33,6 +33,7 @@ export default function DietBuilder() {
   const navigate = useNavigate()
 
   const [studentName, setStudentName] = useState('')
+  const [dietEnabled, setDietEnabled] = useState(true)
   const [dietName, setDietName] = useState('')
   const [validFrom, setValidFrom] = useState(new Date().toISOString().split('T')[0])
   const [validTo, setValidTo] = useState('')
@@ -64,8 +65,9 @@ export default function DietBuilder() {
   useEffect(() => { fetchStudent(); if (isEditing) fetchDiet() }, [studentId])
 
   const fetchStudent = async () => {
-    const { data } = await supabase.from('students').select('user:users(name), anamnese(get_value)').eq('id', studentId).single()
+    const { data } = await supabase.from('students').select('diet_enabled, user:users(name), anamnese(get_value)').eq('id', studentId).single()
     setStudentName((data?.user as any)?.name || '')
+    setDietEnabled((data as any)?.diet_enabled ?? true)
     const getVal = (data?.anamnese as any)?.get_value
     if (getVal) setDays(prev => prev.map(d => ({ ...d, calorie_goal: Math.round(getVal) })))
   }
@@ -203,8 +205,10 @@ export default function DietBuilder() {
             <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0 }}>{isEditing ? 'Editar dieta de' : 'Nova dieta para'}</p>
             <h1 style={{ fontSize: 22, fontWeight: 900, color: 'var(--text)', margin: '4px 0 0 0' }}>{studentName || '...'}</h1>
           </div>
-          <button onClick={() => { setAiStep('params'); setAiError('') }}
-            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', backgroundColor: 'rgba(232,255,0,0.08)', border: '1px solid rgba(232,255,0,0.3)', borderRadius: 12, color: '#E8FF00', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0, marginTop: 6 }}>
+          <button onClick={() => { if (dietEnabled) { setAiStep('params'); setAiError('') } }}
+            disabled={!dietEnabled}
+            title={!dietEnabled ? 'Dieta desativada para este aluno' : undefined}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', backgroundColor: dietEnabled ? 'rgba(232,255,0,0.08)' : 'var(--border)', border: `1px solid ${dietEnabled ? 'rgba(232,255,0,0.3)' : 'transparent'}`, borderRadius: 12, color: dietEnabled ? '#E8FF00' : 'var(--text-2)', fontSize: 13, fontWeight: 700, cursor: dietEnabled ? 'pointer' : 'not-allowed', flexShrink: 0, marginTop: 6, opacity: dietEnabled ? 1 : 0.6 }}>
             <Sparkles size={15} /> Gerar com IA
           </button>
         </div>
