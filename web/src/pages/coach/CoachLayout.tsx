@@ -10,7 +10,6 @@ import { useIsMobile } from '../../hooks/useIsMobile'
 import { getTheme, toggleTheme } from '../../store/theme'
 import { supabase } from '../../lib/supabase'
 
-const LS_ASSESSMENTS = 'coach_assessments_last_seen'
 const LS_QUESTIONNAIRES = 'coach_questionnaires_last_seen'
 
 export default function CoachLayout() {
@@ -57,11 +56,10 @@ export default function CoachLayout() {
       const { data: questionnaires } = await supabase.from('questionnaires').select('id').eq('coach_id', coach.id)
       const questionnaireIds = (questionnaires || []).map((q: any) => q.id)
 
-      const lastSeenAssess = localStorage.getItem(LS_ASSESSMENTS) || new Date(0).toISOString()
       const lastSeenQ = localStorage.getItem(LS_QUESTIONNAIRES) || new Date(0).toISOString()
 
       const [assessRes, msgRes, fbRes, qRes] = await Promise.all([
-        supabase.from('assessments').select('id', { count: 'exact', head: true }).eq('coach_id', coach.id).gt('created_at', lastSeenAssess),
+        supabase.from('assessments').select('id', { count: 'exact', head: true }).eq('coach_id', coach.id).eq('read_by_coach', false),
         supabase.from('messages').select('id', { count: 'exact', head: true }).eq('receiver_id', user!.id).is('read_at', null),
         studentIds.length > 0
           ? supabase.from('training_feedbacks').select('id', { count: 'exact', head: true }).in('student_id', studentIds).eq('read_by_coach', false)
@@ -78,8 +76,8 @@ export default function CoachLayout() {
 
       // Realtime: avaliações
       const subAssess = supabase.channel('rt-assessments')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'assessments', filter: `coach_id=eq.${coach.id}` }, () => {
-          setNewAssessments(p => p + 1)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'assessments', filter: `coach_id=eq.${coach.id}` }, (payload) => {
+          if (!payload.new.read_by_coach) setNewAssessments(p => p + 1)
         }).subscribe()
 
       // Realtime: mensagens
@@ -119,11 +117,10 @@ export default function CoachLayout() {
     const handler = async () => {
       const cId = coachIdRef.current
       if (!cId) return
-      const lastSeen = localStorage.getItem(LS_ASSESSMENTS) || new Date(0).toISOString()
       const { count } = await supabase.from('assessments')
         .select('id', { count: 'exact', head: true })
         .eq('coach_id', cId)
-        .gt('created_at', lastSeen)
+        .eq('read_by_coach', false)
       setNewAssessments(count || 0)
     }
     window.addEventListener('assessment_student_viewed', handler)
@@ -133,10 +130,6 @@ export default function CoachLayout() {
   // Zerar badges ao navegar para a página correspondente
   useEffect(() => {
     const path = location.pathname
-    if (path === '/coach/assessments') {
-      localStorage.setItem(LS_ASSESSMENTS, new Date().toISOString())
-      setNewAssessments(0)
-    }
     if (path === '/coach/chat') {
       setNewMessages(0)
     }
