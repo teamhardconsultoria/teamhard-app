@@ -29,8 +29,8 @@ const TIME_LBL: Record<string, string> = { morning:'Manhã', afternoon:'Tarde', 
 const emptyQ = (): Question => ({ id: crypto.randomUUID(), type:'text', text:'', required:true })
 const spin = { width:24, height:24, border:'2px solid #E8FF00', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.8s linear infinite' }
 
-const inputStyle = { width:'100%', padding:'11px 14px', backgroundColor:'#0A0A0A', border:'1px solid var(--border)', borderRadius:10, color:'#fff', fontSize:13, outline:'none', boxSizing:'border-box' as const }
-const labelStyle = { fontSize:11, color:'#888', textTransform:'uppercase' as const, letterSpacing:1 }
+const inputStyle = { width:'100%', padding:'11px 14px', backgroundColor:'var(--bg)', border:'1px solid var(--border)', borderRadius:10, color:'var(--text)', fontSize:13, outline:'none', boxSizing:'border-box' as const }
+const labelStyle = { fontSize:11, color:'var(--text-2)', textTransform:'uppercase' as const, letterSpacing:1 }
 
 export default function Questionnaires() {
   const { user } = useAuthStore()
@@ -53,6 +53,7 @@ export default function Questionnaires() {
   const [loadingAnamnese, setLoadingAnamnese] = useState(false)
   const [expandedAnamnese, setExpandedAnamnese] = useState<Record<string, boolean>>({})
   const [anamneseSort, setAnamneseSort] = useState<'az' | 'za' | 'recent'>('az')
+  const [questionnaireSort, setQuestionnaireSort] = useState<'recent' | 'az' | 'za'>('recent')
 
   useEffect(() => { init() }, [])
 
@@ -133,30 +134,44 @@ export default function Questionnaires() {
   const formatDate = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', year:'numeric' })
 
   return (
-    <div style={{ flex:1, display:'flex', overflow:'hidden', backgroundColor:'#0A0A0A' }}>
+    <div style={{ flex:1, display:'flex', overflow:'hidden', backgroundColor:'var(--bg)' }}>
       {/* Sidebar */}
       <div style={{ width:280, display:'flex', flexDirection:'column', borderRight:'1px solid var(--border)', flexShrink:0 }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
-          <div>
-            <h1 style={{ fontSize:18, fontWeight:900, color:'#fff', margin:0 }}>Questionários</h1>
-            <p style={{ fontSize:12, color:'#888', marginTop:2 }}>{questionnaires.length} criado{questionnaires.length !== 1 ? 's' : ''}</p>
+        <div style={{ padding:'16px 20px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+            <div>
+              <h1 style={{ fontSize:18, fontWeight:900, color:'var(--text)', margin:0 }}>Questionários</h1>
+              <p style={{ fontSize:12, color:'var(--text-2)', marginTop:2 }}>{questionnaires.length} criado{questionnaires.length !== 1 ? 's' : ''}</p>
+            </div>
+            <button onClick={() => setShowCreate(true)} style={{ width:32, height:32, backgroundColor:'#E8FF00', borderRadius:8, border:'none', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0 }}>
+              <Plus size={16} color="#0A0A0A" />
+            </button>
           </div>
-          <button onClick={() => setShowCreate(true)} style={{ width:32, height:32, backgroundColor:'#E8FF00', borderRadius:8, border:'none', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0 }}>
-            <Plus size={16} color="#0A0A0A" />
-          </button>
+          <div style={{ display:'flex', gap:4 }}>
+            {(['recent', 'az', 'za'] as const).map(opt => {
+              const label = opt === 'recent' ? 'Recentes' : opt === 'az' ? 'A→Z' : 'Z→A'
+              const active = questionnaireSort === opt
+              return (
+                <button key={opt} onClick={() => setQuestionnaireSort(opt)}
+                  style={{ padding:'3px 9px', borderRadius:7, border: active ? '1px solid #E8FF00' : '1px solid var(--border)', backgroundColor: active ? 'rgba(232,255,0,0.1)' : 'transparent', color: active ? '#E8FF00' : '#888', fontSize:11, fontWeight:600, cursor:'pointer' }}>
+                  {label}
+                </button>
+              )
+            })}
+          </div>
         </div>
         <div style={{ flex:1, overflowY:'auto' }}>
           {/* Anamnese — item fixo */}
           <button onClick={() => coachId && handleSelectAnamnese(coachId)}
-            style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 16px', width:'100%', textAlign:'left', backgroundColor: showAnamnese ? '#161616' : 'transparent', border:'none', borderBottom:'1px solid var(--border)', cursor:'pointer' }}
-            onMouseEnter={e => { if (!showAnamnese) e.currentTarget.style.backgroundColor = '#111' }}
+            style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 16px', width:'100%', textAlign:'left', backgroundColor: showAnamnese ? 'var(--surface-hover)' : 'transparent', border:'none', borderBottom:'1px solid var(--border)', cursor:'pointer' }}
+            onMouseEnter={e => { if (!showAnamnese) e.currentTarget.style.backgroundColor = 'var(--surface)' }}
             onMouseLeave={e => { if (!showAnamnese) e.currentTarget.style.backgroundColor = 'transparent' }}>
             <div style={{ width:32, height:32, borderRadius:8, backgroundColor: showAnamnese ? '#E8FF00' : 'rgba(232,255,0,0.1)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
               <ClipboardList size={14} color={showAnamnese ? '#0A0A0A' : '#E8FF00'} />
             </div>
             <div>
-              <p style={{ fontSize:13, fontWeight:700, color:'#fff', margin:0 }}>Anamnese dos Alunos</p>
-              <p style={{ fontSize:11, color:'#888', margin:'2px 0 0 0' }}>Formulário de saúde e objetivos</p>
+              <p style={{ fontSize:13, fontWeight:700, color:'var(--text)', margin:0 }}>Anamnese dos Alunos</p>
+              <p style={{ fontSize:11, color:'var(--text-2)', margin:'2px 0 0 0' }}>Formulário de saúde e objetivos</p>
             </div>
           </button>
 
@@ -165,10 +180,14 @@ export default function Questionnaires() {
           ) : questionnaires.length === 0 ? (
             <div style={{ padding:24, textAlign:'center' }}>
               <FileText size={28} color="#888" style={{ margin:'0 auto 12px' }} />
-              <p style={{ fontSize:13, color:'#888', margin:0 }}>Nenhum questionário ainda.</p>
+              <p style={{ fontSize:13, color:'var(--text-2)', margin:0 }}>Nenhum questionário ainda.</p>
               <button onClick={() => setShowCreate(true)} style={{ fontSize:12, color:'#E8FF00', background:'none', border:'none', cursor:'pointer', marginTop:8 }}>Criar o primeiro</button>
             </div>
-          ) : questionnaires.map(q => (
+          ) : [...questionnaires].sort((a, b) => {
+              if (questionnaireSort === 'az') return a.title.localeCompare(b.title, 'pt-BR')
+              if (questionnaireSort === 'za') return b.title.localeCompare(a.title, 'pt-BR')
+              return 0
+            }).map(q => (
             <QRow key={q.id} q={q} isSelected={selected?.id === q.id} onClick={() => selectQuestionnaire(q)} formatDate={formatDate} />
           ))}
         </div>
@@ -180,8 +199,8 @@ export default function Questionnaires() {
           <div style={{ padding:'14px 20px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
               <div>
-                <p style={{ fontSize:14, fontWeight:700, color:'#fff', margin:0 }}>Anamnese dos Alunos</p>
-                <p style={{ fontSize:12, color:'#888', margin:0 }}>
+                <p style={{ fontSize:14, fontWeight:700, color:'var(--text)', margin:0 }}>Anamnese dos Alunos</p>
+                <p style={{ fontSize:12, color:'var(--text-2)', margin:0 }}>
                   {anamneseList.filter(a => a.completed).length} preenchida{anamneseList.filter(a => a.completed).length !== 1 ? 's' : ''} · {anamneseList.filter(a => !a.data).length} pendente{anamneseList.filter(a => !a.data).length !== 1 ? 's' : ''}
                 </p>
               </div>
@@ -231,14 +250,14 @@ export default function Questionnaires() {
         <div style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0, overflow:'hidden' }}>
           <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 20px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
             <div style={{ flex:1, minWidth:0 }}>
-              <p style={{ fontSize:14, fontWeight:700, color:'#fff', margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{selected.title}</p>
-              <p style={{ fontSize:12, color:'#888', margin:0 }}>{selected.questions.length} perguntas · {selected.assignmentCount} enviado{selected.assignmentCount !== 1 ? 's' : ''} · {selected.responseCount} resposta{selected.responseCount !== 1 ? 's' : ''}</p>
+              <p style={{ fontSize:14, fontWeight:700, color:'var(--text)', margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{selected.title}</p>
+              <p style={{ fontSize:12, color:'var(--text-2)', margin:0 }}>{selected.questions.length} perguntas · {selected.assignmentCount} enviado{selected.assignmentCount !== 1 ? 's' : ''} · {selected.responseCount} resposta{selected.responseCount !== 1 ? 's' : ''}</p>
             </div>
             <div style={{ display:'flex', gap:8, flexShrink:0 }}>
               <button onClick={() => { setSendToStudentId(null); setShowSend(true) }} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 12px', backgroundColor:'#E8FF00', color:'#0A0A0A', borderRadius:8, border:'none', fontSize:12, fontWeight:700, cursor:'pointer' }}>
                 <Send size={12} /> Enviar
               </button>
-              <button onClick={() => deleteQuestionnaire(selected.id)} style={{ padding:7, color:'#888', background:'none', border:'none', cursor:'pointer', borderRadius:8 }}
+              <button onClick={() => deleteQuestionnaire(selected.id)} style={{ padding:7, color:'var(--text-2)', background:'none', border:'none', cursor:'pointer', borderRadius:8 }}
                 onMouseEnter={e => (e.currentTarget.style.color = '#FF4444')} onMouseLeave={e => (e.currentTarget.style.color = '#888')}>
                 <Trash2 size={15} />
               </button>
@@ -251,30 +270,30 @@ export default function Questionnaires() {
               <p style={{ ...labelStyle, margin:'0 0 12px 0' }}>Perguntas</p>
               <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                 {selected.questions.map((q, i) => (
-                  <div key={q.id} style={{ backgroundColor:'#111', border:'1px solid var(--border)', borderRadius:12, padding:'12px 16px' }}>
+                  <div key={q.id} style={{ backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:12, padding:'12px 16px' }}>
                     <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8 }}>
-                      <p style={{ fontSize:14, color:'#fff', margin:0 }}>
-                        <span style={{ color:'#888', marginRight:6 }}>{i + 1}.</span>{q.text}
+                      <p style={{ fontSize:14, color:'var(--text)', margin:0 }}>
+                        <span style={{ color:'var(--text-2)', marginRight:6 }}>{i + 1}.</span>{q.text}
                         {q.required && <span style={{ color:'#FF4444', marginLeft:4 }}>*</span>}
                       </p>
-                      <span style={{ fontSize:10, backgroundColor:'#1E1E1E', color:'#888', padding:'2px 8px', borderRadius:20, flexShrink:0 }}>{TYPE_LABELS[q.type]}</span>
+                      <span style={{ fontSize:10, backgroundColor:'var(--bg)', color:'var(--text-2)', padding:'2px 8px', borderRadius:20, flexShrink:0 }}>{TYPE_LABELS[q.type]}</span>
                     </div>
                     {(q.type === 'single' || q.type === 'multiple') && q.options && (
                       <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:8 }}>
-                        {q.options.map(opt => <span key={opt} style={{ fontSize:12, backgroundColor:'#0A0A0A', border:'1px solid var(--border)', color:'#888', padding:'2px 8px', borderRadius:20 }}>{opt}</span>)}
+                        {q.options.map(opt => <span key={opt} style={{ fontSize:12, backgroundColor:'var(--bg)', border:'1px solid var(--border)', color:'var(--text-2)', padding:'2px 8px', borderRadius:20 }}>{opt}</span>)}
                       </div>
                     )}
                     {q.type === 'scale' && (
                       <div style={{ display:'flex', gap:4, marginTop:8 }}>
                         {Array.from({ length:10 }, (_, k) => (
-                          <div key={k} style={{ width:24, height:24, borderRadius:4, backgroundColor:'#1E1E1E', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, color:'#888' }}>{k+1}</div>
+                          <div key={k} style={{ width:24, height:24, borderRadius:4, backgroundColor:'var(--bg)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, color:'var(--text-2)' }}>{k+1}</div>
                         ))}
                       </div>
                     )}
                     {q.type === 'date' && (
-                      <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8, padding:'8px 12px', backgroundColor:'#0A0A0A', border:'1px solid var(--border)', borderRadius:8, width:'fit-content' }}>
-                        <span style={{ fontSize:12, color:'#888' }}>📅</span>
-                        <span style={{ fontSize:12, color:'#555' }}>DD/MM/AAAA</span>
+                      <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8, padding:'8px 12px', backgroundColor:'var(--bg)', border:'1px solid var(--border)', borderRadius:8, width:'fit-content' }}>
+                        <span style={{ fontSize:12, color:'var(--text-2)' }}>📅</span>
+                        <span style={{ fontSize:12, color:'var(--text-3)' }}>DD/MM/AAAA</span>
                       </div>
                     )}
                   </div>
@@ -288,9 +307,9 @@ export default function Questionnaires() {
                 <p style={{ ...labelStyle, margin:'0 0 12px 0' }}>Aguardando resposta ({pendingStudents.length})</p>
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                   {pendingStudents.map(s => (
-                    <div key={s.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 16px', backgroundColor:'#111', border:'1px solid var(--border)', borderRadius:10 }}>
+                    <div key={s.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 16px', backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:10 }}>
                       <div style={{ width:32, height:32, borderRadius:16, backgroundColor:'rgba(255,152,0,0.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, color:'#FF9800', flexShrink:0 }}>{s.name.charAt(0)}</div>
-                      <span style={{ flex:1, fontSize:13, fontWeight:600, color:'#fff' }}>{s.name}</span>
+                      <span style={{ flex:1, fontSize:13, fontWeight:600, color:'var(--text)' }}>{s.name}</span>
                       <button onClick={() => { setSendToStudentId(s.id); setShowSend(true) }}
                         style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 10px', backgroundColor:'rgba(232,255,0,0.1)', border:'1px solid rgba(232,255,0,0.3)', borderRadius:7, color:'#E8FF00', fontSize:12, fontWeight:700, cursor:'pointer' }}
                         onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(232,255,0,0.18)')}
@@ -309,21 +328,21 @@ export default function Questionnaires() {
               {loadingResponses ? (
                 <div style={{ display:'flex', justifyContent:'center', paddingTop:32 }}><div style={spin} /></div>
               ) : responses.length === 0 ? (
-                <div style={{ backgroundColor:'#111', border:'1px solid var(--border)', borderRadius:12, padding:32, textAlign:'center' }}>
-                  <p style={{ fontSize:13, color:'#888', margin:0 }}>Nenhuma resposta ainda. Envie para os alunos!</p>
+                <div style={{ backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:12, padding:32, textAlign:'center' }}>
+                  <p style={{ fontSize:13, color:'var(--text-2)', margin:0 }}>Nenhuma resposta ainda. Envie para os alunos!</p>
                 </div>
               ) : (
                 <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                   {responses.map(r => (
-                    <div key={r.id} style={{ backgroundColor:'#111', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden' }}>
+                    <div key={r.id} style={{ backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden' }}>
                       <button onClick={() => setExpandedResponses(p => ({ ...p, [r.id]: !p[r.id] }))}
                         style={{ width:'100%', display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px', background:'none', border:'none', cursor:'pointer', textAlign:'left' }}
-                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#161616')} onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--surface-hover)')} onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
                         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                           <div style={{ width:32, height:32, borderRadius:16, backgroundColor:'#E8FF00', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:900, color:'#0A0A0A', flexShrink:0 }}>{r.studentName.charAt(0)}</div>
                           <div>
-                            <p style={{ fontSize:13, fontWeight:600, color:'#fff', margin:0 }}>{r.studentName}</p>
-                            <p style={{ fontSize:11, color:'#888', margin:0 }}>{new Date(r.submitted_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</p>
+                            <p style={{ fontSize:13, fontWeight:600, color:'var(--text)', margin:0 }}>{r.studentName}</p>
+                            <p style={{ fontSize:11, color:'var(--text-2)', margin:0 }}>{new Date(r.submitted_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</p>
                           </div>
                         </div>
                         {expandedResponses[r.id] ? <ChevronUp size={15} color="#888" /> : <ChevronDown size={15} color="#888" />}
@@ -334,7 +353,7 @@ export default function Questionnaires() {
                             const answer = r.answers[q.id]
                             return (
                               <div key={q.id} style={{ padding:'10px 16px', borderBottom:'1px solid var(--border)' }}>
-                                <p style={{ fontSize:11, color:'#888', margin:'0 0 4px 0' }}>{i+1}. {q.text}</p>
+                                <p style={{ fontSize:11, color:'var(--text-2)', margin:'0 0 4px 0' }}>{i+1}. {q.text}</p>
                                 <p style={{ fontSize:13, fontWeight:500, color: answer == null || answer === '' ? 'var(--text-3)' : '#fff', margin:0, fontStyle: answer == null || answer === '' ? 'italic' : 'normal' }}>
                                   {answer == null || answer === '' ? 'Sem resposta' : Array.isArray(answer) ? answer.join(', ') : q.type === 'date' && typeof answer === 'string' && answer.match(/^\d{4}-\d{2}-\d{2}$/) ? new Date(answer + 'T12:00:00').toLocaleDateString('pt-BR') : String(answer)}
                                 </p>
@@ -353,9 +372,9 @@ export default function Questionnaires() {
       ) : (
         <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}>
           <div style={{ textAlign:'center' }}>
-            <div style={{ width:64, height:64, borderRadius:32, backgroundColor:'#1E1E1E', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' }}><FileText size={24} color="#888" /></div>
-            <p style={{ color:'#fff', fontWeight:600, fontSize:14, margin:0 }}>Selecione um questionário</p>
-            <p style={{ color:'#888', fontSize:13, marginTop:6 }}>Ou crie um novo com o botão +</p>
+            <div style={{ width:64, height:64, borderRadius:32, backgroundColor:'var(--bg)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' }}><FileText size={24} color="#888" /></div>
+            <p style={{ color:'var(--text)', fontWeight:600, fontSize:14, margin:0 }}>Selecione um questionário</p>
+            <p style={{ color:'var(--text-2)', fontSize:13, marginTop:6 }}>Ou crie um novo com o botão +</p>
           </div>
         </div>
       )}
@@ -377,15 +396,15 @@ function AnamneseCard({ record, expanded, onToggle, onSend }: { record: Anamnese
   const age = a?.birth_date ? Math.floor((Date.now() - new Date(a.birth_date).getTime()) / (365.25 * 24 * 3600 * 1000)) : null
 
   return (
-    <div style={{ backgroundColor:'#111', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden' }}>
+    <div style={{ backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:12, overflow:'hidden' }}>
       <div style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 16px' }}
-        onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#161616')} onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
+        onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--surface-hover)')} onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
         <div style={{ width:36, height:36, borderRadius:18, backgroundColor:'#E8FF00', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:900, color:'#0A0A0A', flexShrink:0 }}>
           {record.studentName.charAt(0)}
         </div>
         <div style={{ flex:1, minWidth:0, cursor:'pointer' }} onClick={onToggle}>
-          <p style={{ fontSize:13, fontWeight:700, color:'#fff', margin:0 }}>{record.studentName}</p>
-          <p style={{ fontSize:11, color:'#888', margin:'2px 0 0 0' }}>
+          <p style={{ fontSize:13, fontWeight:700, color:'var(--text)', margin:0 }}>{record.studentName}</p>
+          <p style={{ fontSize:11, color:'var(--text-2)', margin:'2px 0 0 0' }}>
             {!a ? 'Não preenchida' : `${GOAL_LBL[a.goal] || a.goal}${age ? ` · ${age} anos` : ''}${a.fitness_level ? ` · ${FITNESS_LBL[a.fitness_level] || a.fitness_level}` : ''}`}
           </p>
         </div>
@@ -469,7 +488,7 @@ function AnamneseCard({ record, expanded, onToggle, onSend }: { record: Anamnese
 function AnamneseSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <p style={{ fontSize:10, color:'#888', fontWeight:700, textTransform:'uppercase', letterSpacing:1, margin:'0 0 8px 0' }}>{title}</p>
+      <p style={{ fontSize:10, color:'var(--text-2)', fontWeight:700, textTransform:'uppercase', letterSpacing:1, margin:'0 0 8px 0' }}>{title}</p>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px 16px' }}>{children}</div>
     </div>
   )
@@ -477,8 +496,8 @@ function AnamneseSection({ title, children }: { title: string; children: React.R
 
 function ARow({ label, value, highlight, alert }: { label: string; value: string; highlight?: boolean; alert?: boolean }) {
   return (
-    <div style={{ display:'flex', justifyContent:'space-between', gap:8, padding:'4px 0', borderBottom:'1px solid #1A1A1A' }}>
-      <span style={{ fontSize:12, color:'#888', flexShrink:0 }}>{label}</span>
+    <div style={{ display:'flex', justifyContent:'space-between', gap:8, padding:'4px 0', borderBottom:'1px solid var(--border)' }}>
+      <span style={{ fontSize:12, color:'var(--text-2)', flexShrink:0 }}>{label}</span>
       <span style={{ fontSize:12, fontWeight:600, color: highlight ? '#E8FF00' : alert ? '#FF9800' : '#fff', textAlign:'right' }}>{value}</span>
     </div>
   )
@@ -488,14 +507,14 @@ function QRow({ q, isSelected, onClick, formatDate }: { q:Questionnaire; isSelec
   const [hovered, setHovered] = useState(false)
   return (
     <button onClick={onClick} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
-      style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'12px 16px', width:'100%', textAlign:'left', backgroundColor: isSelected || hovered ? '#161616' : 'transparent', borderBottom:'1px solid var(--border)', borderTop:'none', borderLeft:'none', borderRight:'none', cursor:'pointer' }}>
+      style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'12px 16px', width:'100%', textAlign:'left', backgroundColor: isSelected || hovered ? 'var(--surface-hover)' : 'transparent', borderBottom:'1px solid var(--border)', borderTop:'none', borderLeft:'none', borderRight:'none', cursor:'pointer' }}>
       <div style={{ width:32, height:32, borderRadius:8, backgroundColor:'rgba(232,255,0,0.1)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>
         <FileText size={14} color="#E8FF00" />
       </div>
       <div style={{ flex:1, minWidth:0 }}>
-        <p style={{ fontSize:13, fontWeight:600, color:'#fff', margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{q.title}</p>
-        <p style={{ fontSize:11, color:'#888', margin:'2px 0 0 0' }}>{q.questions.length} pergunta{q.questions.length !== 1 ? 's' : ''} · {q.responseCount} resposta{q.responseCount !== 1 ? 's' : ''}</p>
-        <p style={{ fontSize:11, color:'#555', margin:'1px 0 0 0' }}>{formatDate(q.created_at)}</p>
+        <p style={{ fontSize:13, fontWeight:600, color:'var(--text)', margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{q.title}</p>
+        <p style={{ fontSize:11, color:'var(--text-2)', margin:'2px 0 0 0' }}>{q.questions.length} pergunta{q.questions.length !== 1 ? 's' : ''} · {q.responseCount} resposta{q.responseCount !== 1 ? 's' : ''}</p>
+        <p style={{ fontSize:11, color:'var(--text-3)', margin:'1px 0 0 0' }}>{formatDate(q.created_at)}</p>
       </div>
       {q.responseCount > 0 && (
         <span style={{ width:20, height:20, borderRadius:10, backgroundColor:'#E8FF00', color:'#0A0A0A', fontSize:10, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:2 }}>{q.responseCount}</span>
@@ -536,21 +555,21 @@ function CreateModal({ coachId, onClose, onSaved }: { coachId:string; onClose:()
 
         <p style={{ ...labelStyle, margin:0 }}>Perguntas</p>
         {questions.map((q, idx) => (
-          <div key={q.id} style={{ backgroundColor:'#0A0A0A', border:'1px solid var(--border)', borderRadius:10, padding:12, display:'flex', flexDirection:'column', gap:8 }}>
+          <div key={q.id} style={{ backgroundColor:'var(--bg)', border:'1px solid var(--border)', borderRadius:10, padding:12, display:'flex', flexDirection:'column', gap:8 }}>
             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-              <span style={{ fontSize:11, color:'#888', width:20, flexShrink:0 }}>{idx+1}.</span>
+              <span style={{ fontSize:11, color:'var(--text-2)', width:20, flexShrink:0 }}>{idx+1}.</span>
               <input value={q.text} onChange={e => updateQ(q.id, { text: e.target.value })} placeholder="Texto da pergunta..."
-                style={{ flex:1, padding:'8px 10px', backgroundColor:'#111', border:'1px solid var(--border)', borderRadius:8, color:'#fff', fontSize:13, outline:'none' }}
+                style={{ flex:1, padding:'8px 10px', backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:8, color:'var(--text)', fontSize:13, outline:'none' }}
                 onFocus={e => (e.currentTarget.style.borderColor = '#E8FF00')} onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')} />
               <select value={q.type} onChange={e => { const t = e.target.value as QuestionType; updateQ(q.id, { type:t, options: (t==='single'||t==='multiple') ? ['',''] : undefined }) }}
-                style={{ padding:'8px', backgroundColor:'#111', border:'1px solid var(--border)', borderRadius:8, color:'#fff', fontSize:12, outline:'none' }}>
+                style={{ padding:'8px', backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:8, color:'var(--text)', fontSize:12, outline:'none' }}>
                 {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
-              <label style={{ display:'flex', alignItems:'center', gap:4, fontSize:12, color:'#888', flexShrink:0 }}>
+              <label style={{ display:'flex', alignItems:'center', gap:4, fontSize:12, color:'var(--text-2)', flexShrink:0 }}>
                 <input type="checkbox" checked={q.required} onChange={e => updateQ(q.id, { required: e.target.checked })} style={{ accentColor:'#E8FF00' }} />Obrig.
               </label>
               {questions.length > 1 && (
-                <button onClick={() => setQuestions(p => p.filter(x => x.id !== q.id))} style={{ background:'none', border:'none', color:'#888', cursor:'pointer', padding:2 }}
+                <button onClick={() => setQuestions(p => p.filter(x => x.id !== q.id))} style={{ background:'none', border:'none', color:'var(--text-2)', cursor:'pointer', padding:2 }}
                   onMouseEnter={e => (e.currentTarget.style.color = '#FF4444')} onMouseLeave={e => (e.currentTarget.style.color = '#888')}>
                   <Trash2 size={14} />
                 </button>
@@ -561,9 +580,9 @@ function CreateModal({ coachId, onClose, onSaved }: { coachId:string; onClose:()
                 {(q.options || []).map((opt, i) => (
                   <div key={i} style={{ display:'flex', alignItems:'center', gap:6 }}>
                     <input value={opt} onChange={e => updateOpt(q.id, i, e.target.value)} placeholder={`Opção ${i+1}`}
-                      style={{ flex:1, padding:'6px 10px', backgroundColor:'#111', border:'1px solid var(--border)', borderRadius:6, color:'#fff', fontSize:12, outline:'none' }} />
+                      style={{ flex:1, padding:'6px 10px', backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text)', fontSize:12, outline:'none' }} />
                     {(q.options?.length || 0) > 2 && (
-                      <button onClick={() => removeOpt(q.id, i)} style={{ background:'none', border:'none', color:'#888', cursor:'pointer' }}><X size={12} /></button>
+                      <button onClick={() => removeOpt(q.id, i)} style={{ background:'none', border:'none', color:'var(--text-2)', cursor:'pointer' }}><X size={12} /></button>
                     )}
                   </div>
                 ))}
@@ -574,7 +593,7 @@ function CreateModal({ coachId, onClose, onSaved }: { coachId:string; onClose:()
         ))}
 
         <button onClick={() => setQuestions(p => [...p, emptyQ()])}
-          style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', border:'1px dashed #3A3A3A', borderRadius:10, color:'#888', fontSize:13, background:'none', cursor:'pointer', width:'100%', justifyContent:'center' }}
+          style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', border:'1px dashed var(--border)', borderRadius:10, color:'var(--text-2)', fontSize:13, background:'none', cursor:'pointer', width:'100%', justifyContent:'center' }}
           onMouseEnter={e => { e.currentTarget.style.borderColor='#E8FF00'; e.currentTarget.style.color='#E8FF00' }}
           onMouseLeave={e => { e.currentTarget.style.borderColor='#3A3A3A'; e.currentTarget.style.color='#888' }}>
           <Plus size={14} /> Adicionar pergunta
@@ -637,13 +656,13 @@ function SendModal({ questionnaire, students, defaultStudentId, coachUserId, coa
 function Modal({ title, subtitle, onClose, children, wide }: { title:string; subtitle?:string; onClose:()=>void; children:React.ReactNode; wide?:boolean }) {
   return (
     <div style={{ position:'fixed', inset:0, backgroundColor:'var(--overlay)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:50, padding:16 }}>
-      <div style={{ backgroundColor:'#111', border:'1px solid var(--border)', borderRadius:20, width:'100%', maxWidth: wide ? 580 : 420, maxHeight:'90vh', display:'flex', flexDirection:'column' }}>
+      <div style={{ backgroundColor:'var(--surface)', border:'1px solid var(--border)', borderRadius:20, width:'100%', maxWidth: wide ? 580 : 420, maxHeight:'90vh', display:'flex', flexDirection:'column' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'18px 20px', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
           <div>
-            <h2 style={{ fontSize:16, fontWeight:900, color:'#fff', margin:0 }}>{title}</h2>
-            {subtitle && <p style={{ fontSize:12, color:'#888', margin:'2px 0 0 0' }}>{subtitle}</p>}
+            <h2 style={{ fontSize:16, fontWeight:900, color:'var(--text)', margin:0 }}>{title}</h2>
+            {subtitle && <p style={{ fontSize:12, color:'var(--text-2)', margin:'2px 0 0 0' }}>{subtitle}</p>}
           </div>
-          <button onClick={onClose} style={{ background:'none', border:'none', color:'#888', cursor:'pointer', padding:4 }}><X size={18} /></button>
+          <button onClick={onClose} style={{ background:'none', border:'none', color:'var(--text-2)', cursor:'pointer', padding:4 }}><X size={18} /></button>
         </div>
         <div style={{ flex:1, overflowY:'auto', padding:20 }}>{children}</div>
       </div>
@@ -655,7 +674,7 @@ function Btn({ children, onClick, primary, disabled, style: extra }: { children:
   const [hovered, setHovered] = useState(false)
   return (
     <button onClick={onClick} disabled={disabled} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
-      style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'12px 16px', borderRadius:12, fontSize:13, fontWeight:700, cursor: disabled ? 'not-allowed' : 'pointer', border: primary ? 'none' : '1px solid var(--border)', backgroundColor: primary ? '#E8FF00' : (hovered ? '#161616' : 'transparent'), color: primary ? '#0A0A0A' : (hovered ? 'var(--text)' : '#888'), opacity: disabled ? 0.5 : 1, transition:'all 0.15s', ...extra }}>
+      style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'12px 16px', borderRadius:12, fontSize:13, fontWeight:700, cursor: disabled ? 'not-allowed' : 'pointer', border: primary ? 'none' : '1px solid var(--border)', backgroundColor: primary ? '#E8FF00' : (hovered ? 'var(--surface-hover)' : 'transparent'), color: primary ? '#0A0A0A' : (hovered ? 'var(--text)' : 'var(--text-2)'), opacity: disabled ? 0.5 : 1, transition:'all 0.15s', ...extra }}>
       {children}
     </button>
   )
