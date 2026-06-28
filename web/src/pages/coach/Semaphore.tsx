@@ -17,6 +17,7 @@ interface StudentData {
   hasCheckinThisWeek: boolean
   hasCheckinIn2Weeks: boolean
   status: Status
+  isNewStudent: boolean
   pendingMessage: { id: string; content: string; scheduled_for: string } | null
 }
 
@@ -110,7 +111,7 @@ export default function Semaphore() {
 
     const { data: rawStudents } = await supabase
       .from('students')
-      .select('id, user_id, users(name, avatar_url)')
+      .select('id, user_id, created_at, users(name, avatar_url)')
       .eq('coach_id', coach.id)
       .eq('payment_status', 'active')
       .eq('access_blocked', false)
@@ -192,15 +193,24 @@ export default function Semaphore() {
 
     // Montar dados dos alunos
     const data: StudentData[] = rawStudents.map(s => {
-      const lastT = lastTrain.get(s.id) || null
-      const days  = daysSince(lastT)
-      const tw    = thisWeek.has(s.user_id)
-      const t2w   = in2Weeks.has(s.user_id)
+      const lastT        = lastTrain.get(s.id) || null
+      const days         = daysSince(lastT)
+      const tw           = thisWeek.has(s.user_id)
+      const t2w          = in2Weeks.has(s.user_id)
+      const studentAge   = daysSince((s as any).created_at)
+      // Aluno novo sem nenhuma atividade: não penalizar com vermelho
+      const isNewStudent = lastT === null && !t2w && studentAge < 14
 
       let status: Status
-      if (days >= 5 || !t2w) status = 'red'
-      else if (days <= 2 && tw) status = 'green'
-      else status = 'yellow'
+      if (isNewStudent) {
+        status = studentAge < 7 ? 'green' : 'yellow'
+      } else if (days >= 5 || !t2w) {
+        status = 'red'
+      } else if (days <= 2 && tw) {
+        status = 'green'
+      } else {
+        status = 'yellow'
+      }
 
       return {
         id: s.id,
@@ -212,6 +222,7 @@ export default function Semaphore() {
         hasCheckinThisWeek: tw,
         hasCheckinIn2Weeks: t2w,
         status,
+        isNewStudent,
         pendingMessage: pendMap.get(s.id) ? { id: pendMap.get(s.id)!.id, content: pendMap.get(s.id)!.content, scheduled_for: pendMap.get(s.id)!.scheduled_for } : null,
       }
     })
@@ -354,7 +365,7 @@ export default function Semaphore() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)' }}>
                           <Activity size={12} />
-                          <span>Treino: <strong style={{ color: 'var(--text)' }}>{formatRelative(s.lastTrainingAt)}</strong></span>
+                          <span>Treino: <strong style={{ color: 'var(--text)' }}>{s.isNewStudent ? 'Aluno novo' : formatRelative(s.lastTrainingAt)}</strong></span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)' }}>
                           <MessageCircle size={12} />
