@@ -277,7 +277,7 @@ export default function StudentProfile() {
           <ActionCard icon={<List size={20} color="#E8FF00" />} title="Ver Treinos" description="Histórico e treinos ativos" to={`/coach/students/${id}/workouts`} navigate={navigate} />
           <ActionCard icon={<Dumbbell size={20} color="#E8FF00" />} title="Novo Treino" description="Monte divisões de treino" to={`/coach/students/${id}/workout/new`} navigate={navigate} />
           <ActionCard icon={<List size={20} color="#E8FF00" />} title="Ver Dietas" description="Dietas ativas e histórico" to={`/coach/students/${id}/diets`} navigate={navigate} />
-          <ActionCard icon={<Salad size={20} color="#E8FF00" />} title="Nova Dieta" description="Monte refeições com macros" to={`/coach/students/${id}/diet/new`} navigate={navigate} />
+          <ActionCard icon={<Salad size={20} color="#E8FF00" />} title="Nova Dieta" description="Monte refeições com macros" to={`/coach/students/${id}/diet/new`} navigate={navigate} disabled={!student.diet_enabled} disabledReason="Dieta desativada para este aluno" />
           <ActionCard icon={<MessageSquare size={20} color="#E8FF00" />} title="Chat" description="Enviar mensagem ao aluno" to={`/coach/chat/${id}`} navigate={navigate} />
           <ActionCard icon={<TrendingUp size={20} color="#E8FF00" />} title="Evolução" description="Gráficos de peso e frequência" to={`/coach/students/${id}/evolution`} navigate={navigate} />
           <ActionCard icon={<History size={20} color="#E8FF00" />} title="Histórico de Treinos" description="Sessões com cargas e reps" to={`/coach/students/${id}/sessions`} navigate={navigate} />
@@ -509,19 +509,20 @@ function MiniStat({ icon, label, value }: { icon: React.ReactNode; label: string
   )
 }
 
-function ActionCard({ icon, title, description, to, navigate, state }: { icon: React.ReactNode; title: string; description: string; to: string; navigate: (to: string, opts?: any) => void; state?: any }) {
+function ActionCard({ icon, title, description, to, navigate, state, disabled, disabledReason }: { icon: React.ReactNode; title: string; description: string; to: string; navigate: (to: string, opts?: any) => void; state?: any; disabled?: boolean; disabledReason?: string }) {
   const [hovered, setHovered] = useState(false)
   return (
-    <div onClick={() => navigate(to, state ? { state } : undefined)}
-      onMouseEnter={() => setHovered(true)}
+    <div onClick={() => { if (!disabled) navigate(to, state ? { state } : undefined) }}
+      onMouseEnter={() => { if (!disabled) setHovered(true) }}
       onMouseLeave={() => setHovered(false)}
-      style={{ backgroundColor: hovered ? '#161616' : 'var(--surface)', border: `1px solid ${hovered ? 'rgba(232,255,0,0.3)' : '#1E1E1E'}`, borderRadius: 14, padding: 16, display: 'flex', alignItems: 'flex-start', gap: 14, cursor: 'pointer', transition: 'all 0.15s' }}>
-      <div style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: hovered ? 'rgba(232,255,0,0.2)' : 'rgba(232,255,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background-color 0.15s' }}>
+      title={disabled ? disabledReason : undefined}
+      style={{ backgroundColor: disabled ? 'var(--surface)' : hovered ? '#161616' : 'var(--surface)', border: `1px solid ${hovered && !disabled ? 'rgba(232,255,0,0.3)' : '#1E1E1E'}`, borderRadius: 14, padding: 16, display: 'flex', alignItems: 'flex-start', gap: 14, cursor: disabled ? 'not-allowed' : 'pointer', transition: 'all 0.15s', opacity: disabled ? 0.45 : 1 }}>
+      <div style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: hovered && !disabled ? 'rgba(232,255,0,0.2)' : 'rgba(232,255,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background-color 0.15s' }}>
         {icon}
       </div>
       <div style={{ minWidth: 0 }}>
         <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{title}</p>
-        <p style={{ fontSize: 12, color: 'var(--text-2)', margin: '3px 0 0 0' }}>{description}</p>
+        <p style={{ fontSize: 12, color: 'var(--text-2)', margin: '3px 0 0 0' }}>{disabled && disabledReason ? disabledReason : description}</p>
       </div>
     </div>
   )
