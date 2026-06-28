@@ -14,8 +14,6 @@ interface StudentData {
   avatar_url: string | null
   lastTrainingAt: string | null
   daysSinceTraining: number
-  hasCheckinThisWeek: boolean
-  hasCheckinIn2Weeks: boolean
   status: Status
   isNewStudent: boolean
   pendingMessage: { id: string; content: string; scheduled_for: string } | null
@@ -195,18 +193,16 @@ export default function Semaphore() {
     const data: StudentData[] = rawStudents.map(s => {
       const lastT        = lastTrain.get(s.id) || null
       const days         = daysSince(lastT)
-      const tw           = thisWeek.has(s.user_id)
-      const t2w          = in2Weeks.has(s.user_id)
       const studentAge   = daysSince((s as any).created_at)
-      // Aluno novo sem nenhuma atividade: não penalizar com vermelho
-      const isNewStudent = lastT === null && !t2w && studentAge < 14
+      // Aluno novo sem sessões registradas: não penalizar com vermelho
+      const isNewStudent = lastT === null && studentAge < 14
 
       let status: Status
       if (isNewStudent) {
         status = studentAge < 7 ? 'green' : 'yellow'
-      } else if (days >= 5 || !t2w) {
+      } else if (days >= 5) {
         status = 'red'
-      } else if (days <= 2 && tw) {
+      } else if (days <= 2) {
         status = 'green'
       } else {
         status = 'yellow'
@@ -219,8 +215,6 @@ export default function Semaphore() {
         avatar_url: (s as any).users?.avatar_url ?? null,
         lastTrainingAt: lastT,
         daysSinceTraining: days,
-        hasCheckinThisWeek: tw,
-        hasCheckinIn2Weeks: t2w,
         status,
         isNewStudent,
         pendingMessage: pendMap.get(s.id) ? { id: pendMap.get(s.id)!.id, content: pendMap.get(s.id)!.content, scheduled_for: pendMap.get(s.id)!.scheduled_for } : null,
@@ -365,13 +359,7 @@ export default function Semaphore() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)' }}>
                           <Activity size={12} />
-                          <span>Treino: <strong style={{ color: 'var(--text)' }}>{s.isNewStudent ? 'Aluno novo' : formatRelative(s.lastTrainingAt)}</strong></span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)' }}>
-                          <MessageCircle size={12} />
-                          <span>Check-in: <strong style={{ color: s.hasCheckinThisWeek ? '#00C853' : s.hasCheckinIn2Weeks ? '#FF9800' : '#FF4444' }}>
-                            {s.hasCheckinThisWeek ? '✓ Esta semana' : s.hasCheckinIn2Weeks ? 'Sem resp. semanal' : '2+ sem sem resp.'}
-                          </strong></span>
+                          <span>Último treino: <strong style={{ color: 'var(--text)' }}>{s.isNewStudent ? 'Aluno novo' : formatRelative(s.lastTrainingAt)}</strong></span>
                         </div>
                       </div>
 
