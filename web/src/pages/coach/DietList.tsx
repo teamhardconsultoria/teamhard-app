@@ -31,11 +31,12 @@ export default function DietList() {
   useEffect(() => { fetchData() }, [studentId])
 
   const fetchData = async () => {
-    const { data: student } = await supabase.from('students').select('diet_enabled, user:users(name)').eq('id', studentId).single()
-    if (student) {
-      setStudentName((student.user as any).name)
-      setDietEnabled((student as any).diet_enabled ?? true)
-    }
+    const [{ data: student }, { data: dietMeta }] = await Promise.all([
+      supabase.from('students').select('user:users(name)').eq('id', studentId).single(),
+      supabase.from('students').select('diet_enabled').eq('id', studentId).single(),
+    ])
+    if (student) setStudentName((student.user as any).name)
+    if (dietMeta) setDietEnabled((dietMeta as any).diet_enabled ?? true)
 
     const { data: dList } = await supabase.from('diets').select('id, name, valid_from, valid_to, active, created_at').eq('student_id', studentId).order('created_at', { ascending: false })
     if (!dList) { setLoading(false); return }

@@ -65,9 +65,12 @@ export default function DietBuilder() {
   useEffect(() => { fetchStudent(); if (isEditing) fetchDiet() }, [studentId])
 
   const fetchStudent = async () => {
-    const { data } = await supabase.from('students').select('diet_enabled, user:users(name), anamnese(get_value)').eq('id', studentId).single()
+    const [{ data }, { data: dietMeta }] = await Promise.all([
+      supabase.from('students').select('user:users(name), anamnese(get_value)').eq('id', studentId).single(),
+      supabase.from('students').select('diet_enabled').eq('id', studentId).single(),
+    ])
     setStudentName((data?.user as any)?.name || '')
-    setDietEnabled((data as any)?.diet_enabled ?? true)
+    if (dietMeta) setDietEnabled((dietMeta as any).diet_enabled ?? true)
     const getVal = (data?.anamnese as any)?.get_value
     if (getVal) setDays(prev => prev.map(d => ({ ...d, calorie_goal: Math.round(getVal) })))
   }
